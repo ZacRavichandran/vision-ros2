@@ -1,37 +1,26 @@
 import queue
-from typing import Tuple, Union, List
-
 from dataclasses import dataclass
+from typing import List, Tuple, Union
+
 import cv2
 import cv_bridge
 import numpy as np
 import pyrealsense2 as rs2
 import tf2_ros
 from geometry_msgs.msg import Point, Quaternion
-# from rosbags.typesys.types import sensor_msgs__msg__CompressedImage as CompressedImgMsg
-# from rosbags.typesys.types import sensor_msgs__msg__Image as ImageMsg
-from teaming_msgs.srv import (
-    GetLabels,
-    SetLabels,
-)
-from teaming_msgs.msg import Track
-from teaming_msgs.msg import Detection
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from scipy.spatial.transform import Rotation
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 from std_msgs.msg import ColorRGBA, Header
+from teaming_msgs.msg import Detection, Track
+
+from teaming_msgs.srv import GetLabels, SetLabels
 from vision_msgs.msg import ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker
 
-from rclpy.qos import ReliabilityPolicy
-
+from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg
-from rclpy.qos import QoSProfile
-
-from rclpy.node import Node
-
-from sensor_msgs.msg import Image, CompressedImage
-
-from vision_ros2.tracker import Tracker, header_from_track, to_track_msg, Hypothesis
 
 
 def decode_img_msg(msg: Union[Image, CompressedImage]) -> np.ndarray:
@@ -70,7 +59,7 @@ def decode_img_msg(msg: Union[Image, CompressedImage]) -> np.ndarray:
                 np.ndarray(
                     shape=(msg.height, msg.width, 4), dtype=np.uint8, buffer=msg.data
                 )
-                )[:, :, :3]
+            )[:, :, :3]
             img = img[..., ::-1]  # swap r and b channels
         elif msg.encoding == "rgba8":
             img = np.copy(
@@ -107,41 +96,41 @@ class Detector:
     def predict(self):
         raise NotImplementedError()
 
+
 @dataclass
 class DetectionConfig:
     # Topics
-    color_sub_topic: str = 'image_raw'
-    depth_info_sub_topic: str = 'depth_raw'
-    depth_sub_topic: str = 'camera_info'
-    detection_topic: str = 'detections'
-    track_topic: str ="tracks"
+    color_sub_topic: str = "image_raw"
+    depth_info_sub_topic: str = "depth_raw"
+    depth_sub_topic: str = "camera_info"
+    detection_topic: str = "detections"
+    track_topic: str = "tracks"
 
-    detection_viz_image: str = "detection_img" 
+    detection_viz_image: str = "detection_img"
     detection_viz_3d: str = "detections_marker"
     track_viz_topic: str = "track_markers"
 
-       
     # Behavior
     drop_old_msg: bool = True
     debug: bool = True
-    target_frame: str = 'map'
-    source_frame: str = 'camera_color_optical_frame'
-    
+    target_frame: str = "map"
+    source_frame: str = "camera_color_optical_frame"
+
     # Detection params
-    labels: str = ''
+    labels: str = ""
     detection_confidence_thresh: float = 0.5
     detection_depth_threshold: float = 7.5
     detection_depth_scale: int = 1000
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
 
-
     # tracker
     track_distance_thresh: float = 2
     tracker_n_dets: int = 10
 
     detect_period: float = 1e-3
-    
+
+
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
         self._detector = detector
@@ -153,68 +142,64 @@ class DetectionComponenet:
         self._intrinsics = None
         self._last_depth = None
         self._tf_buffer = tf2_ros.Buffer()
-        self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self._parent_node)
+        self._tf_listener = tf2_ros.TransformListener(
+            self._tf_buffer, self._parent_node
+        )
         self._labels = self._parse_labels()
 
-        self._tracker = Tracker(distance_threshold=self._data_config.track_distance_thresh, n_track_thresh=self._data_config.tracker_n_dets)
+        self._tracker = Tracker(
+            distance_threshold=self._data_config.track_distance_thresh,
+            n_track_thresh=self._data_config.tracker_n_dets,
+        )
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             # history=HistoryPolicy.KEEP_LAST,
-            depth=10
+            depth=10,
         )
 
         # pub / sub / service
         self._detection_viz_pub = self._parent_node.create_publisher(
-            Marker,
-            f"~/{self._data_config.detection_viz_3d}",
-            qos_profile
+            Marker, f"~/{self._data_config.detection_viz_3d}", qos_profile
         )
         self._annotation_pub = self._parent_node.create_publisher(
-            Image,
-            f"~/{self._data_config.detection_viz_image}",
-            qos_profile
+            Image, f"~/{self._data_config.detection_viz_image}", qos_profile
         )
         self._detection_pub = self._parent_node.create_publisher(
-            Detection,
-            f"~/{self._data_config.detection_topic}",
-            qos_profile
+            Detection, f"~/{self._data_config.detection_topic}", qos_profile
         )
         self._track_pub = self._parent_node.create_publisher(
-            Track,
-            f"~/{self._data_config.track_topic}",
-            qos_profile
+            Track, f"~/{self._data_config.track_topic}", qos_profile
         )
         self._track_viz_pub = self._parent_node.create_publisher(
-            Marker,
-            f"~/{self._data_config.track_viz_topic}",
-            qos_profile
+            Marker, f"~/{self._data_config.track_viz_topic}", qos_profile
         )
         self._rgb_sub = self._parent_node.create_subscription(
-            Image, self._data_config.color_sub_topic, self._img_cbk,
-            qos_profile
+            Image, self._data_config.color_sub_topic, self._img_cbk, qos_profile
         )
         self._depth_sub = self._parent_node.create_subscription(
-            Image, self._data_config.depth_sub_topic, self._depth_cbk,
-            qos_profile
+            Image, self._data_config.depth_sub_topic, self._depth_cbk, qos_profile
         )
         self._depth_info_sub = self._parent_node.create_subscription(
-            Image, self._data_config.depth_info_sub_topic, self._depth_info_cbk,
-            qos_profile
+            Image,
+            self._data_config.depth_info_sub_topic,
+            self._depth_info_cbk,
+            qos_profile,
         )
         self._set_labels_service = self._parent_node.create_service(
-            SetLabels, 
-            'set_labels', 
+            SetLabels,
+            "set_labels",
             self._set_labels_callback,
         )
         self._get_labels_service = self._parent_node.create_service(
-            GetLabels, 
-            'get_labels', 
+            GetLabels,
+            "get_labels",
             self._get_labels_callback,
         )
 
-        self._detection_timer = self._parent_node.create_timer(self._data_config.detect_period, self._process_queue)  
-    
+        self._detection_timer = self._parent_node.create_timer(
+            self._data_config.detect_period, self._process_queue
+        )
 
     def _process_queue(self):
         """Read from image queue and run detection.
@@ -272,7 +257,6 @@ class DetectionComponenet:
             print(e)
             return
 
-
     def _parse_labels(self):
         if self._data_config.labels != "":
             labels = self._data_config.labels.split(",")
@@ -281,21 +265,22 @@ class DetectionComponenet:
             labels = []
         return labels
 
-
     def _load_config(self) -> DetectionConfig:
         config = DetectionConfig()
-        
+
         # Declare and get all parameters in one clean loop
         for field_name, field_type in DetectionConfig.__annotations__.items():
             default_value = getattr(config, field_name)
             self._parent_node.declare_parameter(field_name, default_value)
-            
+
             param_value = self._parent_node.get_parameter(field_name)
             setattr(config, field_name, param_value.value)
-        
+
         return config
 
-    def _set_labels_callback(self, request: SetLabels.Request, response: SetLabels.Response) -> SetLabels.Response:
+    def _set_labels_callback(
+        self, request: SetLabels.Request, response: SetLabels.Response
+    ) -> SetLabels.Response:
         try:
             self.labels = [l.strip() for l in request.labels.split(",")]
             self.setting_labels = True
@@ -306,10 +291,12 @@ class DetectionComponenet:
         except Exception as e:
             self._parent_node.get_logger().error(f"Failed to set labels: {str(e)}")
             response.success = False
-        
+
         return response
-    
-    def _get_labels_callback(self, request: GetLabels.Request, response: GetLabels.Response) -> GetLabels.Response:
+
+    def _get_labels_callback(
+        self, request: GetLabels.Request, response: GetLabels.Response
+    ) -> GetLabels.Response:
         response.labels = str(self.labels)
         return response
 
@@ -326,17 +313,17 @@ class DetectionComponenet:
         self.marker_count += 1
         if self.marker_count > self._data_config.max_marker_count:
             self.marker_count = 1000
-    
+
     def _pub_tracks(self, tracks: List[Hypothesis]) -> None:
         for track in tracks:
-            track_msg = create_marker_msg(id=track.class_id,
-                                          header=header_from_track(track),
-                                          position=track.pose,
-                                          color=ColorRGBA(r=1, g=0.75, b=0, a=1),
-                                          )
+            track_msg = create_marker_msg(
+                id=track.class_id,
+                header=header_from_track(track),
+                position=track.pose,
+                color=ColorRGBA(r=1, g=0.75, b=0, a=1),
+            )
             self._track_viz_pub.publish(track_msg)
             self._track_pub.publish(to_track_msg(track))
-
 
     def _publish_detection_msg(
         self,
@@ -360,7 +347,7 @@ class DetectionComponenet:
         detection_msg.labels.append(label)
 
         self._detection_pub.publish(detection_msg)
-    
+
     def _deproject_detections(
         self, x: float, y: float, w: float, h: float, time: float
     ) -> Tuple[Tuple[float, float, float], float]:
@@ -410,9 +397,9 @@ class DetectionComponenet:
         result_camera_coords = np.array(result_camera_coords)
 
         transform_msg = self._tf_buffer.lookup_transform(
-            self._data_config.target_frame, 
-            self._data_config.source_frame, 
-            self._parent_node.get_clock().now().to_msg()
+            self._data_config.target_frame,
+            self._data_config.source_frame,
+            self._parent_node.get_clock().now().to_msg(),
         )
 
         transform = transform_msg.transform
@@ -436,7 +423,6 @@ class DetectionComponenet:
         z = result_map[2]
 
         return (x, y, z), depth_point
-
 
     def set_labels(self):
         pass
@@ -495,11 +481,13 @@ class DetectionComponenet:
             if depth_point > self._data_config.detection_depth_threshold:
                 continue
 
-            self._tracker.add_detection(time=img_msg.header.stamp,
-                                        class_id=class_id,
-                                        score=conf,
-                                        pose=np.array([x, y, z]), 
-                                        label=class_id)
+            self._tracker.add_detection(
+                time=img_msg.header.stamp,
+                class_id=class_id,
+                score=conf,
+                pose=np.array([x, y, z]),
+                label=class_id,
+            )
 
             self._publish_detection_msg(
                 class_id=class_id,
@@ -510,4 +498,3 @@ class DetectionComponenet:
             )
 
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
-

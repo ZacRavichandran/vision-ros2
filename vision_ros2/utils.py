@@ -1,17 +1,12 @@
-from visualization_msgs.msg import Marker
-from std_msgs.msg import Header, ColorRGBA
-from geometry_msgs.msg import Point, Quaternion
-
-from typing import Sequence
-
-from typing import Union
-
 import dataclasses
+from typing import Sequence, Union
 
 import numpy as np
 import supervision as sv
-from supervision.draw.color import Color, ColorPalette, DEFAULT_COLOR_PALETTE
-
+from geometry_msgs.msg import Point, Quaternion
+from std_msgs.msg import ColorRGBA, Header
+from supervision.draw.color import DEFAULT_COLOR_PALETTE, Color, ColorPalette
+from visualization_msgs.msg import Marker
 
 IDENTITY_QUATERNION = Quaternion(x=0, y=0, z=0, w=1)
 BASE_MARKER = Marker()

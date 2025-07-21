@@ -4,10 +4,9 @@ from collections import defaultdict
 from typing import List
 
 import numpy as np
-
+from geometry_msgs.msg import Point
 from std_msgs.msg import Header
 from teaming_msgs.msg import Track
-from geometry_msgs.msg import Point
 
 
 class Hypothesis:
@@ -210,7 +209,7 @@ class Tracker:
     def log_status(self) -> None:
         for hypothesis_set in self.hypotheses.values():
             self.logger.debug(hypothesis_set.get_status_str())
-    
+
 
 def header_from_track(track: Hypothesis) -> Header:
     header = Header()
@@ -231,3 +230,25 @@ def to_track_msg(track: Hypothesis) -> Track:
     )
     track_msg.pose.pose.orientation.w = 1
     return track_msg
+
+
+def from_track_msg(track_msg: Track, parent: str = "") -> Hypothesis:
+    pose = np.array(
+        [
+            track_msg.pose.pose.position.x,
+            track_msg.pose.pose.position.y,
+            track_msg.pose.pose.position.z,
+        ]
+    )
+    det_time = track_msg.header.stamp.secs + track_msg.header.stamp.nsecs / 1e9
+
+    return Hypothesis(
+        class_id=track_msg.class_id,
+        idx=track_msg.idx,
+        pose=pose,
+        frame=track_msg.header.frame_id,
+        time=det_time,
+        score=1,
+        label=track_msg.label,
+        parent=parent,
+    )

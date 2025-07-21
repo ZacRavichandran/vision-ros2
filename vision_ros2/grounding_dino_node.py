@@ -11,23 +11,22 @@ class GroundingDinoNode(Node):
     def __init__(self):
         super().__init__("grounding_dino_node")
 
-        self.declare_parameter('weights', '')
-        self.declare_parameter('confidence', 0.3)
-        self.declare_parameter('config', '')
+        self.declare_parameter("weights", "")
+        self.declare_parameter("confidence", 0.3)
+        self.declare_parameter("config", "")
 
-        weights = self.get_parameter('weights').get_parameter_value().string_value
-        confidence = self.get_parameter('confidence').get_parameter_value().double_value
-        config = self.get_parameter('config').get_parameter_value().string_value
+        weights = self.get_parameter("weights").get_parameter_value().string_value
+        confidence = self.get_parameter("confidence").get_parameter_value().double_value
+        config = self.get_parameter("config").get_parameter_value().string_value
 
         print(weights)
         print(config)
 
-        self._gd_infer = GroundingDinoInfer(ckpt_path=weights, 
-                                            confidence=confidence, classes=[], 
-                                            config_path=config)
+        self._gd_infer = GroundingDinoInfer(
+            ckpt_path=weights, confidence=confidence, classes=[], config_path=config
+        )
 
-        self._detection_componenet = DetectionComponenet(self,
-                                                         detector=self._gd_infer)
+        self._detection_componenet = DetectionComponenet(self, detector=self._gd_infer)
 
 
 def main():
@@ -40,6 +39,7 @@ def main():
         pass
     finally:
         rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

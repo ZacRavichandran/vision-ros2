@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 
-import time
-from typing import List, Optional, Tuple
-
-import numpy as np
 import sys
 import warnings
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
 import torchvision
-
 
 try:
     from groundingdino.util.inference import Model as GDModel
@@ -18,8 +14,11 @@ try:
     from vision_ros2.utils import vis_result_fast
 except ImportError as ex:
     import sys
-    raise ValueError(f"must install grounding dino: {ex}\n"
-                     f"current sys: {sys.executable}, {sys.path}")
+
+    raise ValueError(
+        f"must install grounding dino: {ex}\n"
+        f"current sys: {sys.executable}, {sys.path}"
+    )
 
 
 warnings.filterwarnings("ignore", message="Unable to import Axes3D")
