@@ -1,15 +1,80 @@
 import dataclasses
 from typing import Sequence, Union
 
+import cv2
 import numpy as np
 import supervision as sv
 from geometry_msgs.msg import Point, Quaternion
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import ColorRGBA, Header
 from supervision.draw.color import DEFAULT_COLOR_PALETTE, Color, ColorPalette
 from visualization_msgs.msg import Marker
 
 IDENTITY_QUATERNION = Quaternion(x=0, y=0, z=0, w=1)
 BASE_MARKER = Marker()
+
+
+def decode_img_msg(msg: Union[Image, CompressedImage]) -> np.ndarray:
+    """Decode ROS image message.
+
+    This implements functionality of cv_bridge (was having issues with some
+    dependencies. This was the simplest solution).
+
+    Parameters
+    ----------
+    msg : Union[ImageMsg, CompressedImgMsg]
+        Incoming ROS image message.
+
+    Returns
+    -------
+    np.ndarray
+        Decoded image as numpy array.
+
+    Raises
+    ------
+    ValueError
+        Raises error if image encoding is not implemented.
+    """
+    if "Compressed" in str(type(msg)):  # better way?
+        np_arr = np.fromstring(msg.data, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)
+    else:
+        if msg.encoding == "rgb8":
+            img = np.copy(
+                np.ndarray(
+                    shape=(msg.height, msg.width, 3), dtype=np.uint8, buffer=msg.data
+                )
+            )
+        elif msg.encoding == "bgra8":
+            img = np.copy(
+                np.ndarray(
+                    shape=(msg.height, msg.width, 4), dtype=np.uint8, buffer=msg.data
+                )
+            )[:, :, :3]
+            img = img[..., ::-1]  # swap r and b channels
+        elif msg.encoding == "rgba8":
+            img = np.copy(
+                np.ndarray(
+                    shape=(msg.height, msg.width, 4), dtype=np.uint8, buffer=msg.data
+                )
+            )
+            img = img[..., :3]
+        elif msg.encoding == "32FC1":
+            dtype = np.dtype("float32")
+            dtype = dtype.newbyteorder(">" if msg.is_bigendian else "<")
+            img = np.ndarray(
+                shape=(msg.height, msg.width), dtype=dtype, buffer=msg.data
+            ).copy()
+        elif msg.encoding == "16UC1":
+            dtype = np.dtype("uint16")
+            dtype = dtype.newbyteorder(">" if msg.is_bigendian else "<")
+            img = np.ndarray(
+                shape=(msg.height, msg.width), dtype=dtype, buffer=msg.data
+            )
+
+        else:
+            raise ValueError(f"{msg.encoding} not supported")
+    return img
 
 
 # should go in utils

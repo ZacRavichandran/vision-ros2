@@ -81,6 +81,16 @@ def generate_launch_description():
         ],
     )
 
+    vlm_node = Node(
+        package="vision_ros2",
+        executable="vlm_node",
+        name="vlm_node",
+        output="screen",
+        namespace=LaunchConfiguration("namespace"),
+        parameters=[],
+        remappings=[],
+    )
+
     return LaunchDescription(
         [
             namespace_arg,
@@ -91,5 +101,6 @@ def generate_launch_description():
             input_depth_topic_arg,
             input_camera_info_arg,
             grounding_dino_node,
+            vlm_node,
         ]
     )
