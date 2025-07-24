@@ -27,7 +27,7 @@ def generate_launch_description():
     # Declare launch arguments
     weights_arg = DeclareLaunchArgument(
         "weights",
-        default_value=default_weights_path,
+        default_value="/home/dcist/data/weights/groundingdino_swint_ogc.pth",
         description="Path to the GroundingDINO model weights file",
     )
 
