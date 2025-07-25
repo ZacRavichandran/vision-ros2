@@ -117,7 +117,7 @@ class DetectionComponenet:
             Image, self._data_config.depth_sub_topic, self._depth_cbk, qos_profile
         )
         self._depth_info_sub = self._parent_node.create_subscription(
-            Image,
+            CameraInfo,
             self._data_config.depth_info_sub_topic,
             self._depth_info_cbk,
             qos_profile,
