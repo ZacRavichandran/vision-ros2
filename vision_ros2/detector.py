@@ -174,20 +174,20 @@ class DetectionComponenet:
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
         # from rs2 / show_center_depth.py
         try:
-            if self.intrinsics:
+            if self._intrinsics:
                 return
-            self.intrinsics = rs2.intrinsics()
-            self.intrinsics.width = camera_info.width
-            self.intrinsics.height = camera_info.height
-            self.intrinsics.ppx = camera_info.K[2]
-            self.intrinsics.ppy = camera_info.K[5]
-            self.intrinsics.fx = camera_info.K[0]
-            self.intrinsics.fy = camera_info.K[4]
+            self._intrinsics = rs2.intrinsics()
+            self._intrinsics.width = camera_info.width
+            self._intrinsics.height = camera_info.height
+            self._intrinsics.ppx = camera_info.K[2]
+            self._intrinsics.ppy = camera_info.K[5]
+            self._intrinsics.fx = camera_info.K[0]
+            self._intrinsics.fy = camera_info.K[4]
             if camera_info.distortion_model == "plumb_bob":
-                self.intrinsics.model = rs2.distortion.brown_conrady
+                self._intrinsics.model = rs2.distortion.brown_conrady
             elif camera_info.distortion_model == "equidistant":
-                self.intrinsics.model = rs2.distortion.kannala_brandt4
-            self.intrinsics.coeffs = [i for i in camera_info.D]
+                self._intrinsics.model = rs2.distortion.kannala_brandt4
+            self._intrinsics.coeffs = [i for i in camera_info.D]
 
         except cv_bridge.CvBridgeError as e:
             print(e)
