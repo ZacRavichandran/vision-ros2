@@ -83,6 +83,8 @@ class DetectionComponenet:
         )
         self._labels = self._parse_labels()
 
+        self.setting_labels = False
+
         self._tracker = Tracker(
             distance_threshold=self._data_config.track_distance_thresh,
             n_track_thresh=self._data_config.tracker_n_dets,
@@ -218,11 +220,11 @@ class DetectionComponenet:
         self, request: SetLabels.Request, response: SetLabels.Response
     ) -> SetLabels.Response:
         try:
-            self.labels = [l.strip() for l in request.labels.split(",")]
+            self._labels = [l.strip() for l in request.labels.split(",")]
             self.setting_labels = True
-            self._detector.set_labels(self.labels)
+            self._detector.set_labels(self._labels)
             self.setting_labels = False
-            self._parent_node.get_logger().info(f"setting labels to: {self.labels}")
+            self._parent_node.get_logger().info(f"setting labels to: {self._labels}")
             response.success = True
         except Exception as e:
             self._parent_node.get_logger().error(f"Failed to set labels: {str(e)}")
@@ -233,7 +235,7 @@ class DetectionComponenet:
     def _get_labels_callback(
         self, request: GetLabels.Request, response: GetLabels.Response
     ) -> GetLabels.Response:
-        response.labels = str(self.labels)
+        response.labels = str(self._labels)
         return response
 
     def _publish_detection_marker(self, header: Header, position: np.ndarray) -> None:
@@ -376,7 +378,7 @@ class DetectionComponenet:
         if self.setting_labels:
             return
 
-        pred_labels = self.labels.copy()
+        pred_labels = self._labels.copy()
 
         img = decode_img_msg(img_msg)
         pred_color, classes, boxes, confidences = self._detector.predict(
