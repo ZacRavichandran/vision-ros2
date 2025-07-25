@@ -27,7 +27,7 @@ def generate_launch_description():
     # Declare launch arguments
     weights_arg = DeclareLaunchArgument(
         "weights",
-        default_value="/home/dcist/data/weights/groundingdino_swint_ogc.pth",
+        default_value="/home/zacravi/projects/dcist/src/vision-ros2/weights/groundingdino_swint_ogc.pth",
         description="Path to the GroundingDINO model weights file",
     )
 
@@ -59,6 +59,12 @@ def generate_launch_description():
         description="camera info",
     )
 
+    camera_frame_arg = DeclareLaunchArgument(
+        "camera_frame",
+        default_value="zed_left_camera_optical_frame",
+        description="camera frame",
+    )
+
     # Node configuration
     grounding_dino_node = Node(
         package="vision_ros2",
@@ -71,7 +77,8 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "chair,desk,person,cone"
+                "labels": "chair,desk,person,cone",
+                "camera_frame": LaunchConfiguration("camera_frame"),
             }
         ],
         remappings=[
@@ -101,6 +108,7 @@ def generate_launch_description():
             input_rgb_topic_arg,
             input_depth_topic_arg,
             input_camera_info_arg,
+            camera_frame_arg,
             grounding_dino_node,
             vlm_node,
         ]

@@ -214,8 +214,8 @@ class Tracker:
 def header_from_track(track: Hypothesis) -> Header:
     header = Header()
     header.frame_id = track.frame
-    header.stamp.secs = np.int32(track.time // 1)
-    header.stamp.nsecs = np.int32(track.time % 1 * 1e9 // 1)
+    header.stamp.sec = int(track.time)
+    header.stamp.nanosec = int((track.time - int(track.time)) * 1e9)
     return header
 
 
@@ -226,9 +226,9 @@ def to_track_msg(track: Hypothesis) -> Track:
     track_msg.label = track.label
     track_msg.class_id = track.class_id
     track_msg.pose.pose.position = Point(
-        x=track.pose[0], y=track.pose[1], z=track.pose[2]
+        x=float(track.pose[0]), y=float(track.pose[1]), z=float(track.pose[2])
     )
-    track_msg.pose.pose.orientation.w = 1
+    track_msg.pose.pose.orientation.w = 1.0
     return track_msg
 
 

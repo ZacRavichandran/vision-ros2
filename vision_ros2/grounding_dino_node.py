@@ -23,7 +23,10 @@ class GroundingDinoNode(Node):
         print(config)
 
         self._gd_infer = GroundingDinoInfer(
-            ckpt_path=weights, confidence=confidence, classes=[], config_path=config
+            ckpt_path=weights,
+            confidence=confidence,
+            classes=["chair", "desk"],
+            config_path=config,
         )
 
         self._detection_componenet = DetectionComponenet(self, detector=self._gd_infer)

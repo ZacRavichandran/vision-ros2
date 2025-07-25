@@ -2,6 +2,7 @@ import dataclasses
 from typing import Sequence, Union
 
 import cv2
+import cv_bridge
 import numpy as np
 import supervision as sv
 from geometry_msgs.msg import Point, Quaternion
@@ -10,7 +11,7 @@ from std_msgs.msg import ColorRGBA, Header
 from supervision.draw.color import DEFAULT_COLOR_PALETTE, Color, ColorPalette
 from visualization_msgs.msg import Marker
 
-IDENTITY_QUATERNION = Quaternion(x=0, y=0, z=0, w=1)
+IDENTITY_QUATERNION = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
 BASE_MARKER = Marker()
 
 
@@ -121,13 +122,69 @@ def vis_result_fast(
         detections.class_id = np.arange(len(detections))
 
     annotated_image = mask_annotator.annotate(scene=image.copy(), detections=detections)
-    annotated_image = label_annotator.annotate(annotated_image, detections=detections, labels=labels)
+    annotated_image = label_annotator.annotate(
+        annotated_image, detections=detections, labels=labels
+    )
 
     if draw_bbox:
         annotated_image = box_annotator.annotate(
             scene=annotated_image, detections=detections
         )
     return annotated_image, labels
+
+
+def debug_marker_types(marker):
+    """Debug ALL fields that need to be integers"""
+    print(f"=== Marker ID {marker.id} Debug ===")
+
+    # Basic fields (you already check these)
+    print(f"marker.id: {type(marker.id)} = {marker.id}")
+    print(f"marker.type: {type(marker.type)} = {marker.type}")
+    print(f"marker.action: {type(marker.action)} = {marker.action}")
+
+    # Timestamp fields
+    print(f"stamp.sec: {type(marker.header.stamp.sec)} = {marker.header.stamp.sec}")
+    print(
+        f"stamp.nanosec: {type(marker.header.stamp.nanosec)} = {marker.header.stamp.nanosec}"
+    )
+
+    # Lifetime fields
+    print(f"lifetime.sec: {type(marker.lifetime.sec)} = {marker.lifetime.sec}")
+    print(
+        f"lifetime.nanosec: {type(marker.lifetime.nanosec)} = {marker.lifetime.nanosec}"
+    )
+
+    # Scale fields (these are often the culprit!)
+    print(f"scale.x: {type(marker.scale.x)} = {marker.scale.x}")
+    print(f"scale.y: {type(marker.scale.y)} = {marker.scale.y}")
+    print(f"scale.z: {type(marker.scale.z)} = {marker.scale.z}")
+
+    # Pose position
+    print(f"pose.position.x: {type(marker.pose.position.x)} = {marker.pose.position.x}")
+    print(f"pose.position.y: {type(marker.pose.position.y)} = {marker.pose.position.y}")
+    print(f"pose.position.z: {type(marker.pose.position.z)} = {marker.pose.position.z}")
+
+    # Pose orientation
+    print(
+        f"pose.orientation.x: {type(marker.pose.orientation.x)} = {marker.pose.orientation.x}"
+    )
+    print(
+        f"pose.orientation.y: {type(marker.pose.orientation.y)} = {marker.pose.orientation.y}"
+    )
+    print(
+        f"pose.orientation.z: {type(marker.pose.orientation.z)} = {marker.pose.orientation.z}"
+    )
+    print(
+        f"pose.orientation.w: {type(marker.pose.orientation.w)} = {marker.pose.orientation.w}"
+    )
+
+    # Color fields
+    print(f"color.r: {type(marker.color.r)} = {marker.color.r}")
+    print(f"color.g: {type(marker.color.g)} = {marker.color.g}")
+    print(f"color.b: {type(marker.color.b)} = {marker.color.b}")
+    print(f"color.a: {type(marker.color.a)} = {marker.color.a}")
+
+    print("=== End Debug ===\n")
 
 
 def create_marker_msg(
@@ -141,10 +198,17 @@ def create_marker_msg(
     marker_type=BASE_MARKER.SPHERE,
 ) -> Marker:
     marker_msg = Marker()
-    marker_msg.id = id
+    marker_msg.id = int(id)
     marker_msg.header = header
-    marker_msg.pose.position = Point(x=position[0], y=position[1], z=position[2])
-    marker_msg.pose.orientation = orientation
+    marker_msg.pose.position = Point(
+        x=float(position[0]), y=float(position[1]), z=float(position[2])
+    )
+
+    # getting typing issues
+    marker_msg.pose.orientation.x = float(orientation.x)
+    marker_msg.pose.orientation.y = float(orientation.y)
+    marker_msg.pose.orientation.z = float(orientation.z)
+    marker_msg.pose.orientation.w = float(orientation.w)
 
     marker_msg.color = color
     marker_msg.scale.x = scale
