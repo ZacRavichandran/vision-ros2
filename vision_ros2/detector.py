@@ -18,6 +18,8 @@ from teaming_msgs.srv import GetLabels, SetLabels
 from vision_msgs.msg import ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker
 
+from PIL import  Image  as PILImage
+
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg, decode_img_msg
 
@@ -381,9 +383,13 @@ class DetectionComponenet:
         pred_labels = self._labels.copy()
 
         img = decode_img_msg(img_msg)
+
         pred_color, classes, boxes, confidences = self._detector.predict(
             img, plot_output=self._data_config.debug
         )
+
+
+        self._parent_node.get_logger().info(f"running dets: with labels: {pred_labels}: {classes}, {confidences}")
 
         if self._data_config.debug:
             # pred_color = pred[0].plot()

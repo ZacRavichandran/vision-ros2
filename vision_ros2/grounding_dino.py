@@ -109,10 +109,13 @@ class GroundingDinoInfer:
             detections.class_id = detections.class_id[nms_idx]
 
             # Somehow some detections will have class_id=-1, remove them
-            valid_idx = detections.class_id != -1
+            valid_idx = detections.class_id != -1 and detections.class_id != None
             detections.xyxy = detections.xyxy[valid_idx]
             detections.confidence = detections.confidence[valid_idx]
             detections.class_id = detections.class_id[valid_idx]
+
+
+            print(f"{detections}")
 
             if plot_output:
                 annotated_image, labels = vis_result_fast(
