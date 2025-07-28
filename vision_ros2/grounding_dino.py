@@ -214,7 +214,7 @@ class GroundingDinoInfer:
         boxes, labels, confidences = self.get_grounding_output(
             self.grounding_dino_model,
             image=img,
-            caption=",".join(pred_classes),
+            caption=".".join(pred_classes),
             box_threshold=self.confidence,
             text_threshold=self.confidence,
         )
