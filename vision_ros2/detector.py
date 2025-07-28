@@ -361,6 +361,7 @@ class DetectionComponenet:
             return (0, 0, 0), 0
 
         depth_value = np.mean(valid_pixels)
+        
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
@@ -373,10 +374,12 @@ class DetectionComponenet:
             transform_msg = self._tf_buffer.lookup_transform(
                 self._data_config.target_frame,
                 self._data_config.camera_frame,
-                self._last_depth.header.stamp,
-                timeout=Duration(seconds=0.5),
+                Time(),
+                #self._last_depth.header.stamp,
+                timeout=Duration(seconds=1),
             )
         except Exception as ex:  # TODO not good
+            self._parent_node.get_logger().info(f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}")
             return (0, 0, 0), 0
             transform_msg = self._tf_buffer.lookup_transform(
                 self._data_config.target_frame,
@@ -403,7 +406,7 @@ class DetectionComponenet:
         x = result_map[0]
         y = result_map[1]
         z = result_map[2]
-
+        
         return (x, y, z), depth_value
 
     def _deprecated_deproject_detections(
@@ -507,13 +510,13 @@ class DetectionComponenet:
             img, plot_output=self._data_config.debug
         )
 
-        self._parent_node.get_logger().info(
-            f"running dets: with labels: {pred_labels}: {classes}, {confidences}"
-        )
+        #self._parent_node.get_logger().info(
+        #    f"running dets: with labels: {pred_labels}: {classes}, {confidences}"
+        #)
 
         if self._data_config.debug:
             # pred_color = pred[0].plot()
-            color_msg = self._bridge.cv2_to_imgmsg(pred_color, encoding="passthrough")
+            color_msg = self._bridge.cv2_to_imgmsg(np.array(pred_color), encoding="passthrough")
             color_msg.header = img_msg.header  # TODO do we want this?
             color_msg.encoding = "rgb8"
 
@@ -533,6 +536,8 @@ class DetectionComponenet:
                 h=box[1] - box[3],
                 time=img_msg.header.stamp,
             )
+
+            self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
 
             # dont publish if 0
             if depth_point == 0:

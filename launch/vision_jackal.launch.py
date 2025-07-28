@@ -27,13 +27,13 @@ def generate_launch_description():
     # Declare launch arguments
     weights_arg = DeclareLaunchArgument(
         "weights",
-        default_value="/home/zacravi/projects/dcist/src/vision-ros2/weights/groundingdino_swint_ogc.pth",
+        default_value="/home/dcist/data/weights/groundingdino_swint_ogc.pth",
         description="Path to the GroundingDINO model weights file",
     )
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.1",
+        default_value="0.3",
         description="Confidence threshold for detection (default: 0.3)",
     )
 
@@ -77,7 +77,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "chair,desk,person,cone",
+                "labels": "chair,desk,person,cone,robot,monitor",
                 "camera_frame": LaunchConfiguration("camera_frame"),
             }
         ],
