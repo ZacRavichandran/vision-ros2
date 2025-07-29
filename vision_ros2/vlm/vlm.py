@@ -50,6 +50,7 @@ class VLMWrapper:
         )
 
     def open_query(self, prompt: str, image: np.ndarray) -> str:
+        print(image)
         img = Image.fromarray(image)
         output = self.model.infer(raw_prompt=prompt, raw_image=img, crop=False)
 

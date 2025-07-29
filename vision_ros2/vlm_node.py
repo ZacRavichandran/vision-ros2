@@ -32,7 +32,6 @@ class VLMInferNode(Node):
 
     def _img_cbk(self, img: Image) -> None:
         self._latest_img = decode_img_msg(img)
-        self.get_logger().info(f"got image of shape: {self._latest_img.shape}")
 
     def _query_scene(self, query_request, query_response):
         if self._latest_img is None:
