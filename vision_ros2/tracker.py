@@ -240,7 +240,7 @@ def from_track_msg(track_msg: Track, parent: str = "") -> Hypothesis:
             track_msg.pose.pose.position.z,
         ]
     )
-    det_time = track_msg.header.stamp.secs + track_msg.header.stamp.nsecs / 1e9
+    det_time = track_msg.header.stamp.sec + track_msg.header.stamp.nanosec / 1e9
 
     return Hypothesis(
         class_id=track_msg.class_id,
