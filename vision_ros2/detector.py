@@ -290,7 +290,7 @@ class DetectionComponenet:
         header: Header,
         label: str,
     ) -> None:
-        self._parent_node.get_logger().info(f"publishing detection: {pose[0]}, {label}")
+        # self._parent_node.get_logger().info(f"publishing detection: {pose[0]}, {label}")
         object_msgs = []
         object_msg = ObjectHypothesisWithPose()
         object_msg.pose.pose.position = Point(x=pose[0], y=pose[1], z=pose[2])
@@ -537,7 +537,7 @@ class DetectionComponenet:
                 time=img_msg.header.stamp,
             )
 
-            self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
+            # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
 
             # dont publish if 0
             if depth_point == 0:
