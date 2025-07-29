@@ -2,11 +2,13 @@
 
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import Image
 from teaming_msgs.srv import Query
 
 from vision_ros2.utils import decode_img_msg
 from vision_ros2.vlm.vlm import VLMWrapper
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 
 class VLMInferNode(Node):
@@ -20,7 +22,9 @@ class VLMInferNode(Node):
 
         self._latest_img = None
 
-        self._img_sub = self.create_subscription(Image, "~/image_raw", self._img_cbk, 1)
+        sub_cbk = ReentrantCallbackGroup()
+        self._img_sub = self.create_subscription(Image, "~/image_raw", self._img_cbk, 1,
+                                                 callback_group=sub_cbk)
 
         self._query_scene = self.create_service(
             Query, "~/query_scene", self._query_scene
@@ -28,6 +32,7 @@ class VLMInferNode(Node):
 
     def _img_cbk(self, img: Image) -> None:
         self._latest_img = decode_img_msg(img)
+        self.get_logger().info(f"got image of shape: {self._latest_img.shape}")
 
     def _query_scene(self, query_request, query_response):
         if self._latest_img is None:
@@ -52,14 +57,11 @@ def main(args=None):
     rclpy.init(args=args)
 
     node = VLMInferNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()
 
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":
