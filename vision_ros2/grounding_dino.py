@@ -151,6 +151,7 @@ class GroundingDinoInfer:
         H, W = tgt["size"]
         boxes = tgt["boxes"]
         labels = tgt["labels"]
+        confs = tgt["confidences"]
         assert len(boxes) == len(labels), "boxes and labels must have same length"
 
         draw = ImageDraw.Draw(image_pil)
@@ -158,7 +159,7 @@ class GroundingDinoInfer:
         mask_draw = ImageDraw.Draw(mask)
 
         # draw boxes and masks
-        for box, label in zip(boxes, labels):
+        for box, label, conf in zip(boxes, labels, confs):
             # from 0..1 to 0..W, 0..H
             box = box * torch.Tensor([W, H, W, H])
             # from xywh to xyxy
@@ -173,15 +174,16 @@ class GroundingDinoInfer:
             draw.rectangle([x0, y0, x1, y1], outline=color, width=6)
             # draw.text((x0, y0), str(label), fill=color)
 
+            plot_label = f"{label}_{conf:0.2f}"
             font = ImageFont.load_default()
             if hasattr(font, "getbbox"):
-                bbox = draw.textbbox((x0, y0), str(label), font)
+                bbox = draw.textbbox((x0, y0), plot_label, font)
             else:
-                w, h = draw.textsize(str(label), font)
+                w, h = draw.textsize(plot_label, font)
                 bbox = (x0, y0, w + x0, y0 + h)
             # bbox = draw.textbbox((x0, y0), str(label))
             draw.rectangle(bbox, fill=color)
-            draw.text((x0, y0), str(label), fill="white")
+            draw.text((x0, y0), plot_label, fill="white")
 
             mask_draw.rectangle([x0, y0, x1, y1], fill=255, width=6)
 
@@ -227,6 +229,7 @@ class GroundingDinoInfer:
             "boxes": boxes,
             "size": [size[1], size[0]],  # H,W
             "labels": labels,
+            "confidences": confidences
         }
         annotated_img = self.plot_boxes_to_image(img_pil, pred_dict)[0]
 
