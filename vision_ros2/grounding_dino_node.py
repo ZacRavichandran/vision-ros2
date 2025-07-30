@@ -31,6 +31,9 @@ class GroundingDinoNode(Node):
 
         self._detection_componenet = DetectionComponenet(self, detector=self._gd_infer)
 
+        # TODO not the cleanest way to do this
+        self._detection_componenet._data_config.detector_confidence = confidence
+
 
 def main():
     rclpy.init()

@@ -13,9 +13,6 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     # Get package share directory and set default weights path
     package_share_directory = get_package_share_directory("vision_ros2")
-    default_weights_path = os.path.join(
-        package_share_directory, "weights", "groundingdino_swint_ogc.pth"
-    )
     default_config_path = os.path.join(
         package_share_directory, "resource", "GroundingDINO_SwinT_OGC.py"
     )
@@ -33,8 +30,14 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.3",
-        description="Confidence threshold for detection (default: 0.3)",
+        default_value="0.4",
+        description="Confidence threshold for detection (default: 0.4)",
+    )
+
+    tracker_n_dets_arg = DeclareLaunchArgument(
+        "tracker_n_dets",
+        default_value="5",
+        description="number of detections for a track",
     )
 
     config_arg = DeclareLaunchArgument(
@@ -79,6 +82,7 @@ def generate_launch_description():
                 "config": LaunchConfiguration("config"),
                 "labels": "chair,desk,person,cone,robot,monitor",
                 "camera_frame": LaunchConfiguration("camera_frame"),
+                "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
             }
         ],
         remappings=[
@@ -109,6 +113,7 @@ def generate_launch_description():
             input_depth_topic_arg,
             input_camera_info_arg,
             camera_frame_arg,
+            tracker_n_dets_arg,
             grounding_dino_node,
             vlm_node,
         ]

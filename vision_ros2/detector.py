@@ -1,27 +1,21 @@
 import math
 import queue
 from dataclasses import dataclass
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
-import cv2
 import cv_bridge
 import numpy as np
-import pyrealsense2 as rs2
-import rclpy
-import sensor_msgs_py.point_cloud2 as pc2
 import tf2_ros
 from geometry_msgs.msg import Point, Quaternion
-from PIL import Image as PILImage
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
-from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2
+from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import ColorRGBA, Header
 from teaming_msgs.msg import Detection, Track
 from teaming_msgs.srv import GetLabels, SetLabels
-from tf2_ros import tf2
 from vision_msgs.msg import ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker
 
@@ -58,12 +52,11 @@ class DetectionConfig:
     debug: bool = True
     target_frame: str = "map"
 
-    # TODO  this  should be programatically set
-    camera_frame: str = "zed_left_camera_optical_frame"
+    camera_frame: str = "camera_optical_frame"
 
     # Detection params
     labels: str = ""
-    detection_confidence_thresh: float = 0.3
+    detector_confidence: float = 0.5
     detection_depth_threshold: float = 7.5
     detection_depth_scale: int = 1000
     detection_publish_deprojection: bool = True
@@ -150,13 +143,13 @@ class DetectionComponenet:
             self._data_config.detect_period, self._process_queue
         )
 
-    def _get_class_id_from_label(self, label: str):
+    def _get_class_id_from_label(self, label: str) -> int:
         if label not in self._label_set:
             self._label_set[label] = len(self._label_set)
 
         return self._label_set[label]
 
-    def _process_queue(self):
+    def _process_queue(self) -> None:
         """Read from image queue and run detection.
 
         ROS will drop incoming messages if the subscriber queue is full.
@@ -191,29 +184,9 @@ class DetectionComponenet:
         self._last_depth = depth_msg
 
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
-        # from rs2 / show_center_depth.py
         self._intrinsics = camera_info
-        # try:
-        #     if self._intrinsics:
-        #         return
-        #     self._intrinsics = rs2.intrinsics()
-        #     self._intrinsics.width = camera_info.width
-        #     self._intrinsics.height = camera_info.height
-        #     self._intrinsics.ppx = camera_info.k[2]
-        #     self._intrinsics.ppy = camera_info.k[5]
-        #     self._intrinsics.fx = camera_info.k[0]
-        #     self._intrinsics.fy = camera_info.k[4]
-        #     if camera_info.distortion_model == "plumb_bob":
-        #         self._intrinsics.model = rs2.distortion.brown_conrady
-        #     elif camera_info.distortion_model == "equidistant":
-        #         self._intrinsics.model = rs2.distortion.kannala_brandt4
-        #     self._intrinsics.coeffs = [i for i in camera_info.d]
 
-        # except cv_bridge.CvBridgeError as e:
-        #     print(e)
-        #     return
-
-    def _parse_labels(self):
+    def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
             labels = self._data_config.labels.split(",")
             labels = [l.strip() for l in labels]
@@ -269,7 +242,7 @@ class DetectionComponenet:
 
         self._marker_count += 1
         if self._marker_count > self._data_config.detection_max_marker_count:
-            self._marker_count = 1000
+            self._marker_count = 0
 
     def _pub_tracks(self, tracks: List[Hypothesis]) -> None:
         for track in tracks:
@@ -284,8 +257,6 @@ class DetectionComponenet:
 
     def _publish_detection_msg(
         self,
-        class_id: int,
-        confidence: float,
         pose: Tuple[float, float, float],
         header: Header,
         label: str,
@@ -304,17 +275,9 @@ class DetectionComponenet:
 
         self._detection_pub.publish(detection_msg)
 
-    def _unnormalize_coords(self, norm_x, norm_y, norm_w, norm_h):
-        """
-        Convert normalized coordinates (0-1) back to pixel coordinates.
-
-        Args:
-            norm_x, norm_y: Normalized center coordinates (0-1)
-            norm_w, norm_h: Normalized width/height (0-1)
-
-        Returns:
-            tuple: (pixel_x, pixel_y, pixel_width, pixel_height)
-        """
+    def _unnormalize_coords(
+        self, norm_x: float, norm_y: float, norm_w: float, norm_h: float
+    ) -> Tuple[int, int, int, int]:
         # Get image dimensions
         img_width = self._intrinsics.width  # 640
         img_height = self._intrinsics.height  # 360
@@ -329,7 +292,7 @@ class DetectionComponenet:
 
     def _deproject_detections(
         self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time
-    ):
+    ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
         if self._intrinsics is None or self._last_depth is None:
             return (0, 0, 0), 0
@@ -361,7 +324,6 @@ class DetectionComponenet:
             return (0, 0, 0), 0
 
         depth_value = np.mean(valid_pixels)
-        
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
@@ -375,95 +337,14 @@ class DetectionComponenet:
                 self._data_config.target_frame,
                 self._data_config.camera_frame,
                 Time(),
-                #self._last_depth.header.stamp,
                 timeout=Duration(seconds=1),
             )
         except Exception as ex:  # TODO not good
-            self._parent_node.get_logger().info(f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}")
-            return (0, 0, 0), 0
-            transform_msg = self._tf_buffer.lookup_transform(
-                self._data_config.target_frame,
-                self._data_config.camera_frame,
-                Time(seconds=0, nanoseconds=0),
+            self._parent_node.get_logger().info(
+                f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
             )
-
-        transform = transform_msg.transform
-
-        rot = Rotation.from_quat(
-            [
-                transform.rotation.x,
-                transform.rotation.y,
-                transform.rotation.z,
-                transform.rotation.w,
-            ]
-        )
-        trans = np.array(
-            [transform.translation.x, transform.translation.y, transform.translation.z]
-        )
-
-        result_map = rot.as_matrix() @ result_camera_coords + trans
-
-        x = result_map[0]
-        y = result_map[1]
-        z = result_map[2]
-        
-        return (x, y, z), depth_value
-
-    def _deprecated_deproject_detections(
-        self, x: float, y: float, w: float, h: float, time: float
-    ) -> Tuple[Tuple[float, float, float], float]:
-        """Get 3D location of a 2D detection from depth
-
-        Parameters
-        ----------
-        x : float
-            X coordinate (center, image space)
-        y : float
-            Y coordinate (center, image space)
-        w : float
-            Detection width
-        h : float
-            Detection height
-        time : float
-            Time of detection
-
-        Returns
-        -------
-        Tuple[Tuple[float, float, float], Float]
-            - (x, y, z) location in world coordinates
-            - value of corresponding depth image
-        """
-
-        if self._last_depth == None or self._intrinsics == None:
             return (0, 0, 0), 0
 
-        # depth is given in mm. We convert that to meters
-        depth_img = decode_img_msg(self._last_depth)
-        depth_img = depth_img / self._data_config.detection_depth_scale
-
-        int_x, int_y = np.int16(x), np.int16(y)
-
-        # take 10% crop around box to reduce noise
-        w = np.maximum(w * 0.1, 2).astype(np.int32)
-        h = np.maximum(h * 0.1, 2).astype(np.int32)
-
-        depth_point = depth_img[
-            int_y - h // 2 : int_y + h // 2, int_x - w // 2 : int_x + w // 2
-        ]
-        depth_point = depth_point.mean()
-
-        result_camera_coords = rs2.rs2_deproject_pixel_to_point(
-            self._intrinsics, (int_x, int_y), depth_point
-        )
-
-        result_camera_coords = np.array(result_camera_coords)
-
-        transform_msg = self._tf_buffer.lookup_transform(
-            self._data_config.target_frame,
-            self._data_config.camera_frame,
-            self._parent_node.get_clock().now().to_msg(),
-        )
-
         transform = transform_msg.transform
 
         rot = Rotation.from_quat(
@@ -484,7 +365,7 @@ class DetectionComponenet:
         y = result_map[1]
         z = result_map[2]
 
-        return (x, y, z), depth_point
+        return (x, y, z), depth_value
 
     def set_labels(self):
         pass
@@ -510,13 +391,15 @@ class DetectionComponenet:
             img, plot_output=self._data_config.debug
         )
 
-        #self._parent_node.get_logger().info(
+        # self._parent_node.get_logger().info(
         #    f"running dets: with labels: {pred_labels}: {classes}, {confidences}"
-        #)
+        # )
 
         if self._data_config.debug:
             # pred_color = pred[0].plot()
-            color_msg = self._bridge.cv2_to_imgmsg(np.array(pred_color), encoding="passthrough")
+            color_msg = self._bridge.cv2_to_imgmsg(
+                np.array(pred_color), encoding="passthrough"
+            )
             color_msg.header = img_msg.header  # TODO do we want this?
             color_msg.encoding = "rgb8"
 
@@ -524,7 +407,7 @@ class DetectionComponenet:
 
         for box, label, conf in zip(boxes, classes, confidences):
 
-            if conf < self._data_config.detection_confidence_thresh:
+            if conf < self._data_config.detector_confidence:
                 continue
 
             box = box.cpu().numpy()
@@ -559,8 +442,6 @@ class DetectionComponenet:
             )
 
             self._publish_detection_msg(
-                class_id=self._get_class_id_from_label(label),
-                confidence=conf,
                 pose=(x, y, z),
                 header=img_msg.header,
                 label=label,

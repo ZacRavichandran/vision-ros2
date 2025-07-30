@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import rclpy
-from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
 from sensor_msgs.msg import Image
 from teaming_msgs.srv import Query
 
 from vision_ros2.utils import decode_img_msg
 from vision_ros2.vlm.vlm import VLMWrapper
-from rclpy.callback_groups import ReentrantCallbackGroup
 
 
 class VLMInferNode(Node):
@@ -23,8 +23,9 @@ class VLMInferNode(Node):
         self._latest_img = None
 
         sub_cbk = ReentrantCallbackGroup()
-        self._img_sub = self.create_subscription(Image, "~/image_raw", self._img_cbk, 1,
-                                                 callback_group=sub_cbk)
+        self._img_sub = self.create_subscription(
+            Image, "~/image_raw", self._img_cbk, 1, callback_group=sub_cbk
+        )
 
         self._query_scene = self.create_service(
             Query, "~/query_scene", self._query_scene
@@ -33,7 +34,9 @@ class VLMInferNode(Node):
     def _img_cbk(self, img: Image) -> None:
         self._latest_img = decode_img_msg(img)
 
-    def _query_scene(self, query_request, query_response):
+    def _query_scene(
+        self, query_request: Query.Request, query_response: Query.Response
+    ) -> Query.Response:
         if self._latest_img is None:
             query_response.success = False
             query_response.answer = "unknown"

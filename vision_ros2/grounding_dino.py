@@ -1,33 +1,15 @@
 #!/usr/bin/env python3
 
-import argparse
-import os
-import sys
 import warnings
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import groundingdino.datasets.transforms as T
 import numpy as np
 import torch
-import torchvision
 from groundingdino.models import build_model
-from groundingdino.util import box_ops
 from groundingdino.util.slconfig import SLConfig
 from groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 from PIL import Image, ImageDraw, ImageFont
-
-try:
-    from groundingdino.util.inference import Model as GDModel
-
-    from vision_ros2.utils import vis_result_fast
-except ImportError as ex:
-    import sys
-
-    raise ValueError(
-        f"must install grounding dino: {ex}\n"
-        f"current sys: {sys.executable}, {sys.path}"
-    )
-
 
 warnings.filterwarnings("ignore", message="Unable to import Axes3D")
 
@@ -56,17 +38,11 @@ class GroundingDinoInfer:
         device : Optional[str] = cuda
             Device on which to put model
         """
-        # self.grounding_dino_model = GDModel(
-        #     model_config_path=str(config_path),
-        #     model_checkpoint_path=str(ckpt_path),
-        #     device=device,
-        # )
         self.grounding_dino_model = self.load_model(
             model_config_path=str(config_path), model_checkpoint_path=str(ckpt_path)
         )
         self.classes = classes
         self.confidence = confidence
-        # self.grounding_dino_model.model.eval()
 
     def load_model(self, model_config_path, model_checkpoint_path, cpu_only=False):
         args = SLConfig.fromfile(model_config_path)
@@ -104,18 +80,21 @@ class GroundingDinoInfer:
         caption,
         box_threshold,
         text_threshold,
-        with_logits=True,
         cpu_only=False,
     ):
         caption = caption.lower()
         caption = caption.strip()
         if not caption.endswith("."):
             caption = caption + "."
+
         device = "cuda" if not cpu_only else "cpu"
+
         model = model.to(device)
         image = image.to(device)
+
         with torch.no_grad():
             outputs = model(image[None], captions=[caption])
+
         logits = outputs["pred_logits"].cpu().sigmoid()[0]  # (nq, 256)
         boxes = outputs["pred_boxes"].cpu()[0]  # (nq, 4)
         logits.shape[0]
@@ -140,14 +119,12 @@ class GroundingDinoInfer:
             )
             pred_phrases.append(pred_phrase)
             pred_logits.append(logit.max().item())
-            # if with_logits:
-            #     pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
-            # else:
-            #     pred_phrases.append(pred_phrase)
 
         return boxes_filt, pred_phrases, pred_logits
 
-    def plot_boxes_to_image(self, image_pil, tgt):
+    def plot_boxes_to_image(
+        self, image_pil: Image.Image, tgt: Dict[str, Any]
+    ) -> Tuple[Image.Image, Image.Image]:
         H, W = tgt["size"]
         boxes = tgt["boxes"]
         labels = tgt["labels"]
@@ -172,7 +149,6 @@ class GroundingDinoInfer:
             x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
 
             draw.rectangle([x0, y0, x1, y1], outline=color, width=6)
-            # draw.text((x0, y0), str(label), fill=color)
 
             plot_label = f"{label}_{conf:0.2f}"
             font = ImageFont.load_default()
@@ -181,7 +157,6 @@ class GroundingDinoInfer:
             else:
                 w, h = draw.textsize(plot_label, font)
                 bbox = (x0, y0, w + x0, y0 + h)
-            # bbox = draw.textbbox((x0, y0), str(label))
             draw.rectangle(bbox, fill=color)
             draw.text((x0, y0), plot_label, fill="white")
 
@@ -229,46 +204,8 @@ class GroundingDinoInfer:
             "boxes": boxes,
             "size": [size[1], size[0]],  # H,W
             "labels": labels,
-            "confidences": confidences
+            "confidences": confidences,
         }
         annotated_img = self.plot_boxes_to_image(img_pil, pred_dict)[0]
-
-        # detections = self.grounding_dino_model.predict_with_classes(
-        #     img,
-        #     pred_classes,
-        #     box_threshold=self.confidence,
-        #     text_threshold=self.confidence,
-        # )
-
-        # annotated_image = img
-
-        # if len(detections.class_id) > 0:
-        #     ### Non-maximum suppression ###
-        #     nms_idx = (
-        #         torchvision.ops.nms(
-        #             torch.from_numpy(detections.xyxy),
-        #             torch.from_numpy(detections.confidence),
-        #             0.5,
-        #         )
-        #         .numpy()
-        #         .tolist()
-        #     )
-
-        #     detections.xyxy = detections.xyxy[nms_idx]
-        #     detections.confidence = detections.confidence[nms_idx]
-        #     detections.class_id = detections.class_id[nms_idx]
-
-        #     # Somehow some detections will have class_id=-1, remove them
-        #     valid_idx = detections.class_id != -1 and detections.class_id != None
-        #     detections.xyxy = detections.xyxy[valid_idx]
-        #     detections.confidence = detections.confidence[valid_idx]
-        #     detections.class_id = detections.class_id[valid_idx]
-
-        #     if plot_output:
-        #         annotated_image, labels = vis_result_fast(
-        #             img, detections, pred_classes, instance_random_color=True
-        #         )
-
-        #     label_str = [pred_classes[cid] for cid in detections.class_id]
 
         return (np.asarray(annotated_img), labels, boxes, confidences)

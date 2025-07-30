@@ -46,7 +46,8 @@ class VLMWrapper:
 
         self.open_scene_prompt = (
             "You are a robot. Describe where you are so you can plan. "
-            "Provide your answer as a noun with a short description. For example: empty sidewalk, road, park with trees and benches, empty parking lot, patio. Answer: "
+            "Provide your answer as a noun with a short description. "
+            "For example: empty sidewalk, road, park with trees and benches, empty parking lot, patio. Answer: "
         )
 
     def open_query(self, prompt: str, image: np.ndarray) -> str:
