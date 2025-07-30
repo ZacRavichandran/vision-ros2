@@ -307,12 +307,16 @@ class DetectionComponenet:
         depth_img = np.array(depth_img, dtype=np.float32)
         # depth_img = decode_img_msg(self._last_depth)
 
-        x, y, h, w = self._unnormalize_coords(x, y, w, h)
+        x, y, w, h = self._unnormalize_coords(x, y, w, h)
+        
+        self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
 
         x_min = round(max(0, x - w / 2))
         x_max = round(min(self._intrinsics.width - 1, x + w // 2))
         y_min = round(max(0, y - h / 2))
         y_max = round(min(self._intrinsics.height - 1, y + h // 2))
+
+        self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
 
         # Extract the region
         region = depth_img[y_min : y_max + 1, x_min : x_max + 1]
@@ -412,11 +416,17 @@ class DetectionComponenet:
 
             box = box.cpu().numpy()
 
+            self._parent_node.get_logger().info(f"got box: {box}")
+
             (x, y, z), depth_point = self._deproject_detections(
-                box[::2].mean(),
-                box[1::2].mean(),
-                w=box[0] - box[2],
-                h=box[1] - box[3],
+                box[0],
+                box[1],
+                w=box[2],
+                h=box[3],
+                #box[::2].mean(),
+                #box[1::2].mean(),
+                #w=box[0] - box[2],
+                #h=box[1] - box[3],
                 time=img_msg.header.stamp,
             )
 
