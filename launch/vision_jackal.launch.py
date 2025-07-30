@@ -40,6 +40,12 @@ def generate_launch_description():
         description="number of detections for a track",
     )
 
+    track_distance_thresh_arg = DeclareLaunchArgument(
+        "track_distance_thresh",
+        default_value=1,
+        description="clustering distance"
+    )
+
     config_arg = DeclareLaunchArgument(
         "config", default_value=default_config_path, description="config path"
     )
@@ -83,6 +89,7 @@ def generate_launch_description():
                 "labels": "chair,desk,person,cone,robot,monitor",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
+                "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
             }
         ],
         remappings=[
@@ -114,6 +121,7 @@ def generate_launch_description():
             input_camera_info_arg,
             camera_frame_arg,
             tracker_n_dets_arg,
+            track_distance_thresh_arg,
             grounding_dino_node,
             vlm_node,
         ]

@@ -309,7 +309,7 @@ class DetectionComponenet:
 
         x, y, w, h = self._unnormalize_coords(x, y, w, h)
         
-        self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
+        # self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
 
         x_min = round(max(0, x - w / 2))
         x_max = round(min(self._intrinsics.width - 1, x + w // 2))
@@ -327,7 +327,10 @@ class DetectionComponenet:
         if len(valid_pixels) == 0:
             return (0, 0, 0), 0
 
+
         depth_value = np.mean(valid_pixels)
+
+        self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
