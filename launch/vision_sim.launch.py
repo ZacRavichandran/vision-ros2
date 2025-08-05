@@ -33,7 +33,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.3",
+        default_value="0.5",
         description="Confidence threshold for detection (default: 0.3)",
     )
 
@@ -70,6 +70,7 @@ def generate_launch_description():
             {
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
+                "labels": "fence,building",
                 "config": LaunchConfiguration("config"),
             }
         ],
