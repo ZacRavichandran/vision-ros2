@@ -158,9 +158,11 @@ class DetectionComponenet:
         """
         if not self._img_queue.empty():
             if self._img_queue.qsize():
+                # print(f"[detector] processing queue with size: {self._img_queue.qsize()}", flush=True)
                 img = self._img_queue.get(block=True)
 
                 if len(self._labels):
+                    # print(f"[detector] running detection with labels: {self._labels}", flush=True)
                     self.detect(img)
 
         tracks = self._tracker.get_tracks()
