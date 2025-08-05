@@ -421,7 +421,7 @@ class DetectionComponenet:
 
             box = box.cpu().numpy()
 
-            # self._parent_node.get_logger().info(f"got box: {box}")
+            self._parent_node.get_logger().info(f"got box: {box}", throttle_duration_sec=3.0)
 
             (x, y, z), depth_point = self._deproject_detections(
                 box[0],
