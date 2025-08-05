@@ -29,7 +29,7 @@ class VLMWrapper:
         if model == SupportedModels.Llava3PhiMini.value:
             self.model = LlavaPhi3()
         elif model == SupportedModels.VipLlava.value:
-            self.model = VipLlava()
+            self.model = VipLlava("cpu")
         else:
             raise ValueError(f"{model} not supported.")
 
@@ -118,16 +118,27 @@ class LlavaPhi3:
 
 
 class VipLlava:
-    def __init__(self) -> None:
-        pass
+    def __init__(self,
+                 device: str = "gpu") -> None:
+        
+        self.device = device
+
+        print(f"Initializing VipLlava model on {device}...", flush=True)
 
         model_id = "llava-hf/vip-llava-7b-hf"
-        self.model = VipLlavaForConditionalGeneration.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            load_in_4bit=True,
-        )
+        if device == "gpu":
+            self.model = VipLlavaForConditionalGeneration.from_pretrained(
+                model_id,
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True,
+                load_in_4bit=True,
+            )
+        elif device == "cpu":
+            self.model = VipLlavaForConditionalGeneration.from_pretrained(
+                model_id,
+                low_cpu_mem_usage=False).to("cpu")
+        else:
+            raise ValueError(f"Unknown device type: {device}. Choose between 'cpu' and 'gpu'.")
 
         self.processor = AutoProcessor.from_pretrained(model_id)
 
@@ -161,9 +172,12 @@ class VipLlava:
             top_half = size[1] // 2
             raw_image = raw_image.crop((0, top_half, 640, 480))
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-            0, torch.float16
-        )
+        if self.device == "gpu":
+            inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
+                0, torch.float16
+            )
+        else:
+            inputs = self.processor(prompt, raw_image, return_tensors="pt").to("cpu")
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
         formatted_output = self.processor.decode(
