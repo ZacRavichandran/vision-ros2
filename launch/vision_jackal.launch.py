@@ -52,19 +52,19 @@ def generate_launch_description():
 
     input_rgb_topic_arg = DeclareLaunchArgument(
         "input_rgb_topic",
-        default_value="/zed/zed_node/left/image_rect_color",
+        default_value="zed/zed_node/left/image_rect_color",
         description="Input image topic",
     )
 
     input_depth_topic_arg = DeclareLaunchArgument(
         "input_depth_topic",
-        default_value="/zed/zed_node/depth/depth_registered",
+        default_value="zed/zed_node/depth/depth_registered",
         description="depth",
     )
 
     input_camera_info_arg = DeclareLaunchArgument(
         "camera_info_topic",
-        default_value="/zed/zed_node/depth/camera_info",
+        default_value="zed/zed_node/depth/camera_info",
         description="camera info",
     )
 
@@ -80,7 +80,6 @@ def generate_launch_description():
         executable="grounding_dino_node",
         name="grounding_dino_node",
         output="screen",
-        namespace=LaunchConfiguration("namespace"),
         parameters=[
             {
                 "weights": LaunchConfiguration("weights"),
@@ -105,7 +104,6 @@ def generate_launch_description():
         executable="vlm_node",
         name="vlm_node",
         output="screen",
-        namespace=LaunchConfiguration("namespace"),
         parameters=[],
         remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
     )
