@@ -330,7 +330,7 @@ class DetectionComponenet:
 
         depth_value = np.mean(valid_pixels)
 
-        self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
+        #self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
