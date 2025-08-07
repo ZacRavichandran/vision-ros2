@@ -116,7 +116,7 @@ class HypothesisSet:
             self.hypotheses[min_idx].update(time=time, pose=pose, score=score)
 
         else:
-            print(f"min distance: {min_hypothesis_dist:0.2f}. adding new track")
+            # print(f"min distance: {min_hypothesis_dist:0.2f}. adding new track")
             self.hypotheses.append(
                 Hypothesis(
                     class_id=class_id,

@@ -316,7 +316,7 @@ class DetectionComponenet:
         y_min = round(max(0, y - h / 2))
         y_max = round(min(self._intrinsics.height - 1, y + h // 2))
 
-        self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
+        # self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
 
         # Extract the region
         region = depth_img[y_min : y_max + 1, x_min : x_max + 1]
@@ -330,7 +330,7 @@ class DetectionComponenet:
 
         depth_value = np.mean(valid_pixels)
 
-        self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
+        # self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
