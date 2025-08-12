@@ -69,8 +69,7 @@ class Hypothesis:
 
     def is_same(self, incoming_hypothesis, pos_tol: float = 1) -> bool:
         return (
-            self.idx == incoming_hypothesis.idx
-            and self.label == incoming_hypothesis.label
+            self.label == incoming_hypothesis.label
             # and self.class_id == incoming_hypothesis.class_id  # use label for open-vocab detection
             and np.linalg.norm(self.pose - incoming_hypothesis.pose) < pos_tol
         )
