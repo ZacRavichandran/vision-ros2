@@ -29,7 +29,7 @@ class VLMWrapper:
         if model == SupportedModels.Llava3PhiMini.value:
             self.model = LlavaPhi3()
         elif model == SupportedModels.VipLlava.value:
-            self.model = VipLlava("cpu")
+            self.model = VipLlava()
         else:
             raise ValueError(f"{model} not supported.")
 
