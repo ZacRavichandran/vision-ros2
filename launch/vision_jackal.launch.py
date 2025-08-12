@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.4",
+        default_value="0.7",
         description="Confidence threshold for detection (default: 0.4)",
     )
 
@@ -86,7 +86,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "chair,desk,person,cone,robot,monitor",
+                "labels": "",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
