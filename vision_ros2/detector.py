@@ -130,12 +130,12 @@ class DetectionComponenet:
         )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
-            "set_labels",
+            "detector/set_labels",
             self._set_labels_callback,
         )
         self._get_labels_service = self._parent_node.create_service(
             GetLabels,
-            "get_labels",
+            "detector/get_labels",
             self._get_labels_callback,
         )
 

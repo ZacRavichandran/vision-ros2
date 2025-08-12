@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.7",
+        default_value="0.6",
         description="Confidence threshold for detection (default: 0.4)",
     )
 
