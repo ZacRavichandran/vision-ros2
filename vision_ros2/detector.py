@@ -211,7 +211,7 @@ class DetectionComponenet:
         self, request: SetLabels.Request, response: SetLabels.Response
     ) -> SetLabels.Response:
         try:
-            self._labels = [l.strip() for l in request.labels.split(",")]
+            self._labels = [l.strip().replace("'", '').replace('"', '') for l in request.labels.split(",")]
             self.setting_labels = True
             self._detector.set_labels(self._labels)
             self.setting_labels = False
