@@ -39,7 +39,7 @@ class VLMInferNode(Node):
     ) -> Query.Response:
         if self._latest_img is None:
             query_response.success = False
-            query_response.answer = "unknown"
+            query_response.answer = "VLM could not recieve image. Response is unknown"
             return query_response
 
         query = f"{query_request.query}. And why? Provide a brief explaination with details in 25 words or less."
