@@ -207,5 +207,7 @@ class GroundingDinoInfer:
             "confidences": confidences,
         }
         annotated_img = self.plot_boxes_to_image(img_pil, pred_dict)[0]
+        annotated_img = np.asarray(annotated_img)
+        annotated_img = annotated_img.transpose(1, 2, 0) # chw -> hwc
 
-        return (np.asarray(annotated_img), labels, boxes, confidences)
+        return (annotated_img, labels, boxes, confidences)
