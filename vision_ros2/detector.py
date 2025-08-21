@@ -402,8 +402,6 @@ class DetectionComponenet:
         #    f"running dets: with labels: {pred_labels}: {classes}, {confidences}"
         # )
 
-        self._parent_node.get_logger().info(f"pred color shape: {pred_color.shape}")
-
         if self._data_config.debug:
             # pred_color = pred[0].plot()
             color_msg = self._bridge.cv2_to_imgmsg(
