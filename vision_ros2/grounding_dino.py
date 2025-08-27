@@ -197,7 +197,10 @@ class GroundingDinoInfer:
         )
 
         if len(boxes) == 0:
-            return img, "", np.array([]), np.array([])
+            img_pil = img_pil.resize((640, 360))
+            img_pil = np.asarray(img_pil)
+
+            return img_pil, "", np.array([]), np.array([])
 
         size = img_pil.size
         pred_dict = {
@@ -207,5 +210,6 @@ class GroundingDinoInfer:
             "confidences": confidences,
         }
         annotated_img = self.plot_boxes_to_image(img_pil, pred_dict)[0]
+        annotated_img = np.asarray(annotated_img)
 
-        return (np.asarray(annotated_img), labels, boxes, confidences)
+        return (annotated_img, labels, boxes, confidences)

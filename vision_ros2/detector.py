@@ -159,9 +159,7 @@ class DetectionComponenet:
         if not self._img_queue.empty():
             if self._img_queue.qsize():
                 img = self._img_queue.get(block=True)
-
-                if len(self._labels):
-                    self.detect(img)
+                self.detect(img)
 
         tracks = self._tracker.get_tracks()
         self._pub_tracks(tracks)
@@ -398,9 +396,9 @@ class DetectionComponenet:
             img, plot_output=self._data_config.debug
         )
 
-        # self._parent_node.get_logger().info(
+        #self._parent_node.get_logger().info(
         #    f"running dets: with labels: {pred_labels}: {classes}, {confidences}"
-        # )
+        #)
 
         if self._data_config.debug:
             # pred_color = pred[0].plot()
