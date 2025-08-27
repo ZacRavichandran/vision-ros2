@@ -9,7 +9,7 @@ import tf2_ros
 from geometry_msgs.msg import Point, Quaternion
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image
@@ -95,9 +95,9 @@ class DetectionComponenet:
         )
 
         qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            # history=HistoryPolicy.KEEP_LAST,
-            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_ALL,
         )
 
         # pub / sub / service
