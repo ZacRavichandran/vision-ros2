@@ -209,7 +209,7 @@ class DetectionComponenet:
         self._parent_node.get_logger().info(f"Initializing book keepers for robots: {robot_names}")
         
         self._robot_book_keepers = [RobotBookKeeper(self, robot_id=idx, robot_name=robot_name) for idx, robot_name in enumerate(robot_names)]
-        self._parent_node.get_logger().info("RobotBookKeepers initialized.")
+        self._parent_node.get_logger().info(f"RobotBookKeepers initialized for {self._data_config.main_node_name} with {len(self._robot_book_keepers)} robots.")
 
     def _get_class_id_from_label(self, label: str) -> int:
         if label not in self._label_set:

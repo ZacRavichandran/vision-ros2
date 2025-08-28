@@ -111,14 +111,18 @@ def generate_launch_description():
         # ],
     )
 
-    # vlm_node = Node(
-    #     package="vision_ros2",
-    #     executable="vlm_node",
-    #     name="vlm_node",
-    #     output="screen",
-    #     parameters=[],
-    #     remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
-    # )
+    vlm_node = Node(
+        package="vision_ros2",
+        executable="vlm_node",
+        name="vlm_node",
+        output="screen",
+        parameters=[
+            {
+                "vlm_color_sub_topic": LaunchConfiguration("input_rgb_topic")
+                
+            }
+        ]
+    )
 
     return LaunchDescription(
         [
@@ -134,6 +138,6 @@ def generate_launch_description():
             tracker_n_dets_arg,
             track_distance_thresh_arg,
             grounding_dino_node,
-            # vlm_node,
+            vlm_node,
         ]
     )

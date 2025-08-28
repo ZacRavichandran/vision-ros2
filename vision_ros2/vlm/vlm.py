@@ -51,7 +51,7 @@ class VLMWrapper:
         )
 
     def open_query(self, prompt: str, image: np.ndarray) -> str:
-        print(image)
+        # print(image)
         img = Image.fromarray(image)
         output = self.model.infer(raw_prompt=prompt, raw_image=img, crop=False)
 
@@ -90,7 +90,7 @@ class LlavaPhi3:
         model_id = "xtuner/llava-phi-3-mini-hf"
         self.model = LlavaForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             low_cpu_mem_usage=True,
         ).to(0)
         self.processor = AutoProcessor.from_pretrained(model_id)
@@ -104,7 +104,7 @@ class LlavaPhi3:
         # raw_image = Image.open(requests.get(image_file, stream=True).raw)
 
         inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-            0, torch.float16
+            0, torch.float32
         )
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
@@ -129,8 +129,8 @@ class VipLlava:
         if device == "gpu":
             self.model = VipLlavaForConditionalGeneration.from_pretrained(
                 model_id,
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=False,
                 load_in_4bit=True,
             )
         elif device == "cpu":
@@ -173,11 +173,11 @@ class VipLlava:
             raw_image = raw_image.crop((0, top_half, 640, 480))
 
         if self.device == "gpu":
-            inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-                0, torch.float16
+            inputs = self.processor(raw_image, prompt, return_tensors="pt").to(
+                0, torch.float32
             )
         else:
-            inputs = self.processor(prompt, raw_image, return_tensors="pt").to("cpu")
+            inputs = self.processor(raw_image, prompt, return_tensors="pt").to("cpu")
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
         formatted_output = self.processor.decode(
