@@ -100,6 +100,13 @@ class DetectionComponenet:
             history=HistoryPolicy.KEEP_ALL,
         )
 
+        img_sub_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=2,
+        )
+
         # pub / sub / service
         self._detection_viz_pub = self._parent_node.create_publisher(
             Marker, f"~/{self._data_config.detection_viz_3d}", qos_profile
@@ -117,16 +124,16 @@ class DetectionComponenet:
             Marker, f"~/{self._data_config.track_viz_topic}", qos_profile
         )
         self._rgb_sub = self._parent_node.create_subscription(
-            Image, self._data_config.color_sub_topic, self._img_cbk, qos_profile
+            Image, self._data_config.color_sub_topic, self._img_cbk, img_sub_profile
         )
         self._depth_sub = self._parent_node.create_subscription(
-            Image, self._data_config.depth_sub_topic, self._depth_cbk, qos_profile
+            Image, self._data_config.depth_sub_topic, self._depth_cbk, img_sub_profile
         )
         self._depth_info_sub = self._parent_node.create_subscription(
             CameraInfo,
             self._data_config.depth_info_sub_topic,
             self._depth_info_cbk,
-            qos_profile,
+            img_sub_profile
         )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
@@ -142,6 +149,7 @@ class DetectionComponenet:
         self._detection_timer = self._parent_node.create_timer(
             self._data_config.detect_period, self._process_queue
         )
+
 
     def _get_class_id_from_label(self, label: str) -> int:
         if label not in self._label_set:
@@ -175,7 +183,7 @@ class DetectionComponenet:
         """
         while self._data_config.drop_old_msg and not self._img_queue.empty():
             self._img_queue.get(block=False)
-
+ 
         self._img_queue.put(img_msg)
 
     def _depth_cbk(self, depth_msg: Image) -> None:
