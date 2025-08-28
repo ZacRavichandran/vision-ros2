@@ -74,6 +74,14 @@ def generate_launch_description():
         description="camera frame",
     )
 
+    main_node_name_arg = DeclareLaunchArgument(
+        "main_node_name",
+        default_value="grounding_dino_node",
+        description="main node name",
+    )
+
+    # TODO(Ankit): Make names of robots an arg
+
     # Node configuration
     grounding_dino_node = Node(
         package="vision_ros2",
@@ -81,7 +89,7 @@ def generate_launch_description():
         name="grounding_dino_node",
         output="screen",
         parameters=[
-            {
+            {  
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
@@ -89,24 +97,28 @@ def generate_launch_description():
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
+                "main_node_name": LaunchConfiguration("main_node_name"),
+                "color_sub_topic": LaunchConfiguration("input_rgb_topic"),
+                "depth_sub_topic": LaunchConfiguration("input_depth_topic"),
+                "depth_info_sub_topic": LaunchConfiguration("camera_info_topic"),
             }
-        ],
-        remappings=[
-            # Add any topic remappings here if needed
-            ("image_raw", LaunchConfiguration("input_rgb_topic")),
-            ("depth_raw", LaunchConfiguration("input_depth_topic")),
-            ("camera_info", LaunchConfiguration("camera_info_topic")),
-        ],
+        ]
+        # remappings=[
+        #     # Add any topic remappings here if needed
+        #     ("image_raw", LaunchConfiguration("input_rgb_topic")),
+        #     ("depth_raw", LaunchConfiguration("input_depth_topic")),
+        #     ("camera_info", LaunchConfiguration("camera_info_topic")),
+        # ],
     )
 
-    vlm_node = Node(
-        package="vision_ros2",
-        executable="vlm_node",
-        name="vlm_node",
-        output="screen",
-        parameters=[],
-        remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
-    )
+    # vlm_node = Node(
+    #     package="vision_ros2",
+    #     executable="vlm_node",
+    #     name="vlm_node",
+    #     output="screen",
+    #     parameters=[],
+    #     remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
+    # )
 
     return LaunchDescription(
         [
@@ -118,9 +130,10 @@ def generate_launch_description():
             input_depth_topic_arg,
             input_camera_info_arg,
             camera_frame_arg,
+            main_node_name_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
             grounding_dino_node,
-            vlm_node,
+            # vlm_node,
         ]
     )
