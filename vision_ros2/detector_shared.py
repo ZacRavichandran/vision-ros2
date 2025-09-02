@@ -151,7 +151,7 @@ class DetectionComponenet:
         self._robot_book_keepers = []
 
         self._qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             depth=10,
         )
 
