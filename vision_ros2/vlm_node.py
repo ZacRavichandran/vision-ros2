@@ -16,7 +16,9 @@ class VLMInferNode(Node):
         super().__init__("vlm_node")
 
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
+        self.declare_parameter("flip_img", False) 
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
+        self._flip_img = self.get_parameter("flip_img").get_parameter_value().bool_value
 
         self._vlm = VLMWrapper(model)
 
@@ -33,6 +35,9 @@ class VLMInferNode(Node):
 
     def _img_cbk(self, img: Image) -> None:
         self._latest_img = decode_img_msg(img)
+
+        if self._flip_img:
+            self._latest_img = self._latest_img[::-1]
 
     def _query_scene(
         self, query_request: Query.Request, query_response: Query.Response

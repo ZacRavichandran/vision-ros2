@@ -69,6 +69,9 @@ class DetectionConfig:
     detect_period: float = 1e-3
 
 
+    flip_img: bool = False
+
+
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
         self._detector = detector
@@ -399,6 +402,10 @@ class DetectionComponenet:
         pred_labels = self._labels.copy()
 
         img = decode_img_msg(img_msg)
+
+        if self._data_config.flip_img:
+            img = img[::-1]
+            self._parent_node.get_logger().info(f"input shape: {img.shape}")
 
         pred_color, classes, boxes, confidences = self._detector.predict(
             img, plot_output=self._data_config.debug

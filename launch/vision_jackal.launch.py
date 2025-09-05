@@ -73,6 +73,11 @@ def generate_launch_description():
         default_value="zed_left_camera_optical_frame",
         description="camera frame",
     )
+    flip_img_arg = DeclareLaunchArgument(
+        "flip_img", default_value="False", description="config path"
+    )
+
+    flip_img = LaunchConfiguration("flip_img")
 
     # Node configuration
     grounding_dino_node = Node(
@@ -89,6 +94,7 @@ def generate_launch_description():
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
+                "flip_img": flip_img
             }
         ],
         remappings=[
@@ -104,7 +110,7 @@ def generate_launch_description():
         executable="vlm_node",
         name="vlm_node",
         output="screen",
-        parameters=[],
+        parameters=[{"flip_img": flip_img}],
         remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
     )
 
@@ -113,6 +119,7 @@ def generate_launch_description():
             namespace_arg,
             weights_arg,
             confidence_arg,
+            flip_img_arg,
             config_arg,
             input_rgb_topic_arg,
             input_depth_topic_arg,
