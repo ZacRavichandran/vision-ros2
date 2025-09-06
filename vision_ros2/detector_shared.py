@@ -67,7 +67,7 @@ class DetectionConfig:
 
     # tracker
     track_distance_thresh: float = 2
-    tracker_n_dets: int = 10
+    tracker_n_dets: int = 4
 
     detect_period: float = 1e-3
 
@@ -203,7 +203,7 @@ class DetectionComponenet:
         if self._init_bookkeepers_timer:
             self._init_bookkeepers_timer.cancel()
 
-        self._parent_node.declare_parameter("names_of_robots", ["warty", "wanda"]) #TODO(Ankit): This needs to be param set in launch file
+        self._parent_node.declare_parameter("names_of_robots", ["warty", "wanda", "wilbur", "wendy"]) #TODO(Ankit): This needs to be param set in launch file
         robot_names = self._parent_node.get_parameter("names_of_robots").value
         self._parent_node.get_logger().info(f"Initializing book keepers for robots: {robot_names}")
         
@@ -245,7 +245,7 @@ class DetectionComponenet:
 
                     if len(self._labels):
                         # print(f"[detector] running detection with labels: {self._labels}", flush=True)
-                        self._parent_node.get_logger().info(f"Trying to detect for robot : {robot_book._robot_name}", throttle_duration_sec=10.0)
+                        self._parent_node.get_logger().info(f"Trying to detect for robot : {robot_book._robot_name}", throttle_duration_sec=30.0)
                         self.detect(img, robot_book)
                     else:
                         self._parent_node.get_logger().info(f"[detector] WARNING: no labels set for robot: {robot_book._robot_name}, skipping detection", throttle_duration_sec=3.0)
@@ -348,6 +348,7 @@ class DetectionComponenet:
                 header=header_from_track(track),
                 position=track.pose,
                 color=ColorRGBA(r=1.0, g=0.75, b=0.0, a=1.0),
+                scale=0.45,
             )
             robot_book._track_viz_pub.publish(track_msg)
             robot_book._track_pub.publish(to_track_msg(track))
@@ -530,7 +531,7 @@ class DetectionComponenet:
             box = box.cpu().numpy()
 
             self._parent_node.get_logger().info(
-                f"got box: {box} for robot: {robot_book._robot_name}", throttle_duration_sec=10.0)
+                f"got box: {box} for robot: {robot_book._robot_name}", throttle_duration_sec=20.0)
 
             (x, y, z), depth_point = self._deproject_detections(
                 box[0],

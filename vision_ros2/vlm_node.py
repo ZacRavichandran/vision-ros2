@@ -40,7 +40,7 @@ class VLMInferNode(Node):
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
 
-        self.declare_parameter("names_of_robots", ["warty", "wanda"])
+        self.declare_parameter("names_of_robots", ["warty", "wanda", "wilbur", "wendy"])
         robot_names = self.get_parameter("names_of_robots").value
 
         self.declare_parameter("vlm_color_sub_topic", "multisense_front/color/image_raw")
