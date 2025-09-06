@@ -46,6 +46,10 @@ def generate_launch_description():
         description="clustering distance"
     )
 
+    depth_dist_thresh_arg = DeclareLaunchArgument(
+        "detection_depth_threshold", default_value="2.0", description="depth distance threshold"
+    )
+
     config_arg = DeclareLaunchArgument(
         "config", default_value=default_config_path, description="config path"
     )
@@ -97,6 +101,7 @@ def generate_launch_description():
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
+                "detection_depth_threshold": LaunchConfiguration("detection_depth_threshold"),
                 "main_node_name": LaunchConfiguration("main_node_name"),
                 "color_sub_topic": LaunchConfiguration("input_rgb_topic"),
                 "depth_sub_topic": LaunchConfiguration("input_depth_topic"),
@@ -137,6 +142,7 @@ def generate_launch_description():
             main_node_name_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
+            depth_dist_thresh_arg,
             grounding_dino_node,
             vlm_node,
         ]
