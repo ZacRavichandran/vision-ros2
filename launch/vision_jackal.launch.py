@@ -42,7 +42,7 @@ def generate_launch_description():
 
     track_distance_thresh_arg = DeclareLaunchArgument(
         "track_distance_thresh",
-        default_value="1",
+        default_value="5",
         description="clustering distance"
     )
 

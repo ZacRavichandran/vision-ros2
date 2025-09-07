@@ -67,7 +67,7 @@ class Hypothesis:
         avg_vel = (filtered_pose[-1:] - filtered_pose[1:]).mean(0)
         return avg_vel, cov
 
-    def is_same(self, incoming_hypothesis, pos_tol: float = 1) -> bool:
+    def is_same(self, incoming_hypothesis, pos_tol: float = 5) -> bool:
         return (
             self.label == incoming_hypothesis.label
             # and self.class_id == incoming_hypothesis.class_id  # use label for open-vocab detection
@@ -80,7 +80,7 @@ class Hypothesis:
 
 
 class HypothesisSet:
-    def __init__(self, dist_threshold: float = 1) -> None:
+    def __init__(self, dist_threshold: float = 5) -> None:
         # TODO make efficient
         self.hypotheses = []
         self.dist_threshold = dist_threshold
@@ -100,6 +100,7 @@ class HypothesisSet:
         n_hypothesis: int,
         frame: str,
         label: str,
+        logger = None
     ) -> bool:
         # find best fit pose
         added_hypothesis = False
@@ -110,6 +111,11 @@ class HypothesisSet:
             if dist < min_hypothesis_dist:
                 min_hypothesis_dist = dist
                 min_idx = idx
+
+
+        if logger != None:
+            logger.info(f"incoming pose: {pose}. min dist: {min_hypothesis_dist}, thres: {self.dist_threshold}")
+
 
         if min_hypothesis_dist < self.dist_threshold:
             self.hypotheses[min_idx].update(time=time, pose=pose, score=score)
@@ -172,6 +178,7 @@ class Tracker:
         pose: np.ndarray,
         frame: str,
         label: str = "",
+        logger = None,
     ) -> None:
         added = self.hypotheses[label].add_detection(
             time=time,
@@ -181,6 +188,7 @@ class Tracker:
             frame=frame,
             n_hypothesis=self.hypothesis_idx,
             label=label,
+            logger=logger,
         )
         if added:
             self.hypothesis_idx += 1

@@ -97,6 +97,8 @@ class DetectionComponenet:
             n_track_thresh=self._data_config.tracker_n_dets,
         )
 
+        self._parent_node.get_logger().info("config tracker with thresh: {self._data_config.track_distance_thresh}")
+
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
@@ -405,7 +407,6 @@ class DetectionComponenet:
 
         if self._data_config.flip_img:
             img = img[::-1]
-            self._parent_node.get_logger().info(f"input shape: {img.shape}")
 
         pred_color, classes, boxes, confidences = self._detector.predict(
             img, plot_output=self._data_config.debug
@@ -445,6 +446,9 @@ class DetectionComponenet:
                 #h=box[1] - box[3],
                 time=img_msg.header.stamp,
             )
+
+            if self._data_config.flip_img:
+                y *= -1
 
             # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
 
