@@ -40,7 +40,7 @@ class VLMInferNode(Node):
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
 
-        self.declare_parameter("names_of_robots", ["warty", "wanda", "wilbur", "wendy"])
+        self.declare_parameter("names_of_robots", ["warty", "wanda"])
         robot_names = self.get_parameter("names_of_robots").value
 
         self.declare_parameter("vlm_color_sub_topic", "multisense_front/color/image_raw")
@@ -92,7 +92,12 @@ class VLMInferNode(Node):
         # query_response.success = True
         # query_response.answer = parsed
         # return query_response
-
+        # self.get_logger().info("----------------------------------------------------------------------")
+        # self.get_logger().info("----------------------------------------------------------------------")
+        # self.get_logger().info(f"Received query request from robot: {query_request.robot_name} with query: {query_request.query}")
+        # self.get_logger().info("----------------------------------------------------------------------")
+        # self.get_logger().info("----------------------------------------------------------------------")
+        
         query_robot_name = query_request.robot_name.strip("'\"")
 
         for robot_book in self._robot_book_keepers:
