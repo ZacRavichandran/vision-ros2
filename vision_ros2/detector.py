@@ -57,13 +57,13 @@ class DetectionConfig:
     # Detection params
     labels: str = ""
     detector_confidence: float = 0.5
-    detection_depth_threshold: float = 7.5
+    detection_depth_threshold: float = 8
     detection_depth_scale: int = 1000
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
 
     # tracker
-    track_distance_thresh: float = 2
+    track_distance_thresh: float = 5
     tracker_n_dets: int = 10
 
     detect_period: float = 1e-3
