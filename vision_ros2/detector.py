@@ -406,7 +406,7 @@ class DetectionComponenet:
         img = decode_img_msg(img_msg)
 
         if self._data_config.flip_img:
-            img = img[::-1]
+            img = img[::-1, ::-1]
 
         pred_color, classes, boxes, confidences = self._detector.predict(
             img, plot_output=self._data_config.debug
@@ -446,9 +446,6 @@ class DetectionComponenet:
                 #h=box[1] - box[3],
                 time=img_msg.header.stamp,
             )
-
-            if self._data_config.flip_img:
-                y *= -1
 
             # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
 
