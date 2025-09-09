@@ -13,7 +13,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import ColorRGBA, Header
+from std_msgs.msg import ColorRGBA, Header, String
 from teaming_msgs.msg import Detection, Track
 from teaming_msgs.srv import GetLabels, SetLabels
 from vision_msgs.msg import ObjectHypothesisWithPose
@@ -113,6 +113,11 @@ class DetectionComponenet:
         )
 
         # pub / sub / service
+
+        self._info_topic_pub = self._parent_node.create_publisher(
+            String, f"~/info", qos_profile
+        )
+
         self._detection_viz_pub = self._parent_node.create_publisher(
             Marker, f"~/{self._data_config.detection_viz_3d}", qos_profile
         )
@@ -451,10 +456,20 @@ class DetectionComponenet:
 
             # dont publish if 0
             if depth_point == 0:
+                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z}) with conf: {conf:0.2f}. " \
+                    f"{depth_point} is 0"
+                msg = String()
+                msg.data = info_msg
+                self._info_topic_pub.publish(msg)
                 continue
 
             # don't publish detections far from camera
             if depth_point > self._data_config.detection_depth_threshold:
+                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z}) with conf: {conf:0.2f}. " \
+                    f"{depth_point} out of range {self._data_config.detection_depth_threshold}"
+                msg = String()
+                msg.data = info_msg
+                self._info_topic_pub.publish(msg)
                 continue
 
             msg_stamp = img_msg.header.stamp
