@@ -57,7 +57,7 @@ class DetectionConfig:
     # Detection params
     labels: str = ""
     detector_confidence: float = 0.5
-    detection_depth_threshold: float = 8
+    detection_depth_threshold: float = 15
     detection_depth_scale: int = 1000
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
@@ -311,6 +311,7 @@ class DetectionComponenet:
     ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
         if self._intrinsics is None or self._last_depth is None:
+            self._parent_node.get_logger().info(f"Error intrinsics: {self._intrinsics is None}, depth: {self._last_depth is None}")
             return (0, 0, 0), 0
 
         fx = self._intrinsics.k[0]
@@ -332,7 +333,7 @@ class DetectionComponenet:
         y_min = round(max(0, y - h / 2))
         y_max = round(min(self._intrinsics.height - 1, y + h // 2))
 
-        # self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
+        #self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
 
         # Extract the region
         region = depth_img[y_min : y_max + 1, x_min : x_max + 1]
