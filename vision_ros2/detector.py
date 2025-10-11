@@ -75,6 +75,7 @@ class DetectionConfig:
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
         self._detector = detector
+        self._task_prompt = "<CAPTION_TO_PHRASE_GROUNDING>" # TODO(Ankit): Make this a param later
         self._img_queue = queue.Queue(maxsize=2)
         self._bridge = cv_bridge.CvBridge()
         self._parent_node = parent_node
@@ -87,6 +88,7 @@ class DetectionComponenet:
             self._tf_buffer, self._parent_node
         )
         self._labels = self._parse_labels()
+        self._full_label_text = self._data_config.labels
         self._label_set = {}
 
         self.setting_labels = False
@@ -97,7 +99,8 @@ class DetectionComponenet:
             n_track_thresh=self._data_config.tracker_n_dets,
         )
 
-        self._parent_node.get_logger().info("config tracker with thresh: {self._data_config.track_distance_thresh}")
+        self._parent_node.get_logger().info(f"config tracker with thresh: {self._data_config.track_distance_thresh}")
+        self._parent_node.get_logger().info(f"Raw label text: {self._full_label_text}")
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -178,6 +181,10 @@ class DetectionComponenet:
             if self._img_queue.qsize():
                 img = self._img_queue.get(block=True)
                 self.detect(img)
+            else:
+                self._parent_node.get_logger().error("No images in queue to process in inner IF condition. Check image queue!!!", throttle_duration_sec=5.0)
+        else:
+            self._parent_node.get_logger().error("No images in queue to process. Check image subscription!!!", throttle_duration_sec=5.0)
 
         tracks = self._tracker.get_tracks()
         self._pub_tracks(tracks)
@@ -204,10 +211,12 @@ class DetectionComponenet:
 
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
-            labels = self._data_config.labels.split(",")
+            labels = self._data_config.labels.split("and")
             labels = [l.strip() for l in labels]
+            self._parent_node.get_logger().info(f"Parsed labels: {labels}")
         else:
             labels = []
+            self._parent_node.get_logger().info("NO LABELS SPECIFIED!!! DO NOT PROCEED WITHOUT CORRECTING THIS!!!")
         return labels
 
     def _load_config(self) -> DetectionConfig:
@@ -307,11 +316,11 @@ class DetectionComponenet:
         return pixel_x, pixel_y, pixel_width, pixel_height
 
     def _deproject_detections(
-        self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time
+        self, x1: np.ndarray, y1: np.ndarray, x2: np.ndarray, y2: np.ndarray, time
     ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
         if self._intrinsics is None or self._last_depth is None:
-            self._parent_node.get_logger().info(f"Error intrinsics: {self._intrinsics is None}, depth: {self._last_depth is None}")
+            self._parent_node.get_logger().error(f"Error intrinsics: {self._intrinsics is None}, depth: {self._last_depth is None}")
             return (0, 0, 0), 0
 
         fx = self._intrinsics.k[0]
@@ -321,17 +330,18 @@ class DetectionComponenet:
 
         # depth is given in mm. We convert that to meters
         depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "passthrough")
+        depth_img = self._detector.preprocess_img_depth(depth_img, resize_dims=(640, 480))
         depth_img = np.array(depth_img, dtype=np.float32)
         # depth_img = decode_img_msg(self._last_depth)
 
-        x, y, w, h = self._unnormalize_coords(x, y, w, h)
+        # x, y, w, h = self._unnormalize_coords(x, y, w, h)
         
         # self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
 
-        x_min = round(max(0, x - w / 2))
-        x_max = round(min(self._intrinsics.width - 1, x + w // 2))
-        y_min = round(max(0, y - h / 2))
-        y_max = round(min(self._intrinsics.height - 1, y + h // 2))
+        x_min = round(max(0, x1))
+        x_max = round(min(self._intrinsics.width - 1, x2))
+        y_min = round(max(0, y1))
+        y_max = round(min(self._intrinsics.height - 1, y2))
 
         #self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
 
@@ -345,13 +355,13 @@ class DetectionComponenet:
             return (0, 0, 0), 0
 
 
-        depth_value = np.mean(valid_pixels)
+        depth_value = np.median(valid_pixels) # TODO(Ankit): Maybe median makes more sense
 
         #self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
-        X = (x - cx) * depth_value / fx
-        Y = (y - cy) * depth_value / fy
+        X = (((x2 - x1) // 2 + x1) - cx) * depth_value / fx
+        Y = (((y2 - y1) // 2 + y1) - cy) * depth_value / fy
         Z = depth_value
 
         result_camera_coords = np.array([X, Y, Z])
@@ -364,7 +374,7 @@ class DetectionComponenet:
                 timeout=Duration(seconds=1),
             )
         except Exception as ex:  # TODO not good
-            self._parent_node.get_logger().info(
+            self._parent_node.get_logger().error(
                 f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
             )
             return (0, 0, 0), 0
@@ -405,17 +415,26 @@ class DetectionComponenet:
             Incoming image message.
         """
         if self.setting_labels:
+            self._parent_node.get_logger().error("Issue in setting labels while processing queue.")
             return
 
         pred_labels = self._labels.copy()
 
+        # convert ros image message to a numpy array
         img = decode_img_msg(img_msg)
 
         if self._data_config.flip_img:
             img = img[::-1, ::-1]
 
-        pred_color, classes, boxes, confidences = self._detector.predict(
-            img, plot_output=self._data_config.debug
+        # pred_color, classes, boxes, confidences = self._detector.predict(
+        #     img, plot_output=self._data_config.debug
+        # )
+
+        pred_color, classes, boxes = self._detector.generate_response(
+            task_prompt=self._task_prompt,
+            task_input=self._full_label_text,
+            image_input=img,
+            resize_dims=(640, 480)
         )
 
         #self._parent_node.get_logger().info(
@@ -425,27 +444,27 @@ class DetectionComponenet:
         if self._data_config.debug:
             # pred_color = pred[0].plot()
             color_msg = self._bridge.cv2_to_imgmsg(
-                np.array(pred_color), encoding="passthrough"
+                np.array(pred_color), encoding="rgb8"
             )
             color_msg.header = img_msg.header  # TODO do we want this?
             color_msg.encoding = "rgb8"
 
             self._annotation_pub.publish(color_msg)
 
-        for box, label, conf in zip(boxes, classes, confidences):
+        for box, label in zip(boxes, classes):
 
-            if conf < self._data_config.detector_confidence:
-                continue
+            # if conf < self._data_config.detector_confidence:
+            #     continue
 
-            box = box.cpu().numpy()
+            # box = box.cpu().numpy()
 
             # self._parent_node.get_logger().info(f"got box: {box}")
 
             (x, y, z), depth_point = self._deproject_detections(
-                box[0],
-                box[1],
-                w=box[2],
-                h=box[3],
+                x1=box[0],
+                y1=box[1],
+                x2=box[2],
+                y2=box[3],
                 #box[::2].mean(),
                 #box[1::2].mean(),
                 #w=box[0] - box[2],
@@ -457,7 +476,7 @@ class DetectionComponenet:
 
             # dont publish if 0
             if depth_point == 0:
-                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z}) with conf: {conf:0.2f}. " \
+                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z})." \
                     f"{depth_point} is 0"
                 msg = String()
                 msg.data = info_msg
@@ -466,7 +485,7 @@ class DetectionComponenet:
 
             # don't publish detections far from camera
             if depth_point > self._data_config.detection_depth_threshold:
-                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z}) with conf: {conf:0.2f}. " \
+                info_msg = f"Skipping detection: {label}: ({x}, {y}, {z})." \
                     f"{depth_point} out of range {self._data_config.detection_depth_threshold}"
                 msg = String()
                 msg.data = info_msg
@@ -478,7 +497,7 @@ class DetectionComponenet:
             self._tracker.add_detection(
                 time=msg_stamp.sec + msg_stamp.nanosec // 1e9,
                 class_id=self._get_class_id_from_label(label),
-                score=conf,
+                score=1.0, # TODO(Ankit): Currently hardcoded, replace with actual confidence
                 pose=np.array([x, y, z]),
                 label=label,
                 frame=self._data_config.target_frame,
@@ -490,3 +509,5 @@ class DetectionComponenet:
                 label=label,
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
+
+            self._parent_node.get_logger().info(f"Published detection for {label} at ({x}, {y}, {z})", throttle_duration_sec=3.0)

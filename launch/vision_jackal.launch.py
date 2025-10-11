@@ -36,7 +36,7 @@ def generate_launch_description():
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="5",
+        default_value="3",
         description="number of detections for a track",
     )
 
@@ -90,7 +90,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "",
+                "labels": "Suitcase and Barrel and Traffic Cone",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
@@ -105,14 +105,14 @@ def generate_launch_description():
         ],
     )
 
-    vlm_node = Node(
-        package="vision_ros2",
-        executable="vlm_node",
-        name="vlm_node",
-        output="screen",
-        parameters=[{"flip_img": flip_img}],
-        remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
-    )
+    # vlm_node = Node(
+    #     package="vision_ros2",
+    #     executable="vlm_node",
+    #     name="vlm_node",
+    #     output="screen",
+    #     parameters=[{"flip_img": flip_img}],
+    #     remappings=[("~/image_raw", LaunchConfiguration("input_rgb_topic"))],
+    # )
 
     return LaunchDescription(
         [
@@ -128,6 +128,6 @@ def generate_launch_description():
             tracker_n_dets_arg,
             track_distance_thresh_arg,
             grounding_dino_node,
-            vlm_node,
+            # vlm_node,
         ]
     )
