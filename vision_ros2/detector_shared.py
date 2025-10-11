@@ -67,7 +67,7 @@ class DetectionConfig:
 
     # tracker
     track_distance_thresh: float = 2
-    tracker_n_dets: int = 4
+    tracker_n_dets: int = 4 # TODO(Ankit): Make this a parameter
 
     detect_period: float = 1e-3
 
@@ -203,7 +203,7 @@ class DetectionComponenet:
         if self._init_bookkeepers_timer:
             self._init_bookkeepers_timer.cancel()
 
-        self._parent_node.declare_parameter("names_of_robots", ["warty", "wanda"]) #TODO(Ankit): This needs to be param set in launch file
+        self._parent_node.declare_parameter("names_of_robots", ["warty", "wanda", "wilbur", "wendy"]) #TODO(Ankit): This needs to be param set in launch file
         robot_names = self._parent_node.get_parameter("names_of_robots").value
         self._parent_node.get_logger().info(f"Initializing book keepers for robots: {robot_names}")
         

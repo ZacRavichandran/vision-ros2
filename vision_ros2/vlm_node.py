@@ -40,7 +40,7 @@ class VLMInferNode(Node):
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
 
-        self.declare_parameter("names_of_robots", ["warty", "wanda"])
+        self.declare_parameter("names_of_robots", ["warty", "wanda", "wilbur", "wendy"]) #TODO(Ankit): This needs to be param set in launch file
         robot_names = self.get_parameter("names_of_robots").value
 
         self.declare_parameter("vlm_color_sub_topic", "multisense_front/color/image_raw")
@@ -112,7 +112,7 @@ class VLMInferNode(Node):
 
                 msg = self._vlm.open_query(prompt=query, image=robot_book._latest_img)
 
-                parsed = msg.split(query)[-1].strip()
+                parsed = msg.split(query)[-1].strip().replace(",", "|")
                 self.get_logger().info(f"vlm response from robot {robot_book._robot_name}: {[parsed]}")
 
                 query_response.success = True
