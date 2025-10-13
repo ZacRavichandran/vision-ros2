@@ -1,11 +1,13 @@
 from transformers import AutoProcessor, AutoModelForCausalLM
 import supervision as sv
 from PIL import Image
+import numpy as np
 
 class FlorenceModel:
-    def __init__(self, model_id='microsoft/Florence-2-large-ft'):
+    def __init__(self, model_id='microsoft/Florence-2-large', detection_conf=0.3):
 
         self.model_id = model_id
+        self.detection_conf = detection_conf
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id, trust_remote_code=True).eval().cuda()
         self.processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
 
@@ -48,30 +50,22 @@ class FlorenceModel:
         max_new_tokens=1024,
         early_stopping=False,
         do_sample=False,
-        num_beams=1
+        num_beams=3,
+        output_scores=True,
+        return_dict_in_generate=True
         )
 
-        # transition_scores = self.model.compute_transition_scores(
-        #     sequences=generated_ids["sequences"],
-        #     scores=generated_ids["scores"],
-        #     beam_indices=generated_ids["beam_indices"],
-        #     normalize_logits=False
-        # )
+        prediction, scores, beam_indices = generated_ids.sequences, generated_ids.scores, generated_ids.beam_indices
 
-        # print(transition_scores, flush=True)
-
-        # print(generated_ids["sequences"], flush=True)
-        # print("--------------------------------------------------")
-        # print(generated_ids["sequences_scores"], flush=True)
-        # print("----------------------------------------------------")
-        # print(generated_ids["scores"], flush=True)
-
-        generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-
-        # print(generated_text)
+        transition_scores = self.model.compute_transition_scores(
+            sequences=prediction,
+            scores=scores,
+            beam_indices=beam_indices,
+        )
 
         parsed_answer = self.processor.post_process_generation(
-            generated_text,
+            sequence=prediction[0],
+            transition_beam_score=transition_scores[0],
             task=task_prompt,
             image_size=(image_input.width, image_input.height)
         )
@@ -82,12 +76,29 @@ class FlorenceModel:
         #     image_size=(image_input.width, image_input.height)
         # )
 
+        if "scores" in parsed_answer[task_prompt].keys():
+
+            valid_detections = np.array(parsed_answer[task_prompt]["scores"]) > self.detection_conf
+            parsed_answer[task_prompt]["bboxes"] = np.array(parsed_answer[task_prompt]["bboxes"])[valid_detections]
+            parsed_answer[task_prompt]["labels"] = np.array(parsed_answer[task_prompt]["labels"])[valid_detections]
+            parsed_answer[task_prompt]["scores"] = np.array(parsed_answer[task_prompt]["scores"])[valid_detections]
+
+            scores_strings = np.array([f" ({score:.2f})" for score in parsed_answer[task_prompt]["scores"]])
+
+            if len(scores_strings) > 0:
+                non_merged_labels = parsed_answer[task_prompt]["labels"]
+                parsed_answer[task_prompt]["labels"] = np.char.add(np.array(parsed_answer[task_prompt]["labels"]), scores_strings)
+            else:
+                return (image_input, None, None, None)
+        else:
+            return (image_input, None, None, None)
+
         annotated_img = self.plot_bbox(parsed_answer, image_input)
 
         bboxes = parsed_answer[task_prompt]['bboxes']
-        labels = parsed_answer[task_prompt]['labels']
+        scores = parsed_answer[task_prompt]['scores']
 
-        return (annotated_img, labels, bboxes)
+        return (annotated_img, non_merged_labels, bboxes, scores)
 
     def plot_bbox(self, output_vlm_generation, image, plot_polygon=False):
 

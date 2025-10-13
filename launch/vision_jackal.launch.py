@@ -30,13 +30,13 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.5",
+        default_value="0.3",
         description="Confidence threshold for detection (default: 0.4)",
     )
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="3",
+        default_value="6",
         description="number of detections for a track",
     )
 
@@ -90,7 +90,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "Suitcase and Barrel and Traffic Cone",
+                "labels": "Car and Bus and Barrel and Person",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),

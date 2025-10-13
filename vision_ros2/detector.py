@@ -430,11 +430,11 @@ class DetectionComponenet:
         #     img, plot_output=self._data_config.debug
         # )
 
-        pred_color, classes, boxes = self._detector.generate_response(
+        pred_color, classes, boxes, scores = self._detector.generate_response(
             task_prompt=self._task_prompt,
             task_input=self._full_label_text,
             image_input=img,
-            resize_dims=(640, 480)
+            resize_dims=None # TODO(Ankit): Verify if this has any impact on performance
         )
 
         #self._parent_node.get_logger().info(
@@ -450,6 +450,9 @@ class DetectionComponenet:
             color_msg.encoding = "rgb8"
 
             self._annotation_pub.publish(color_msg)
+
+        if boxes is None or classes is None or scores is None:
+            return
 
         for box, label in zip(boxes, classes):
 
