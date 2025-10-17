@@ -92,8 +92,8 @@ class DetectionComponenet:
         )
         self.latest_transform = None
         self._last_odom = None
+        self._full_label_text = None
         self._labels = self._parse_labels()
-        self._full_label_text = self._data_config.labels
         self._label_set = {}
 
         self.setting_labels = False
@@ -245,11 +245,13 @@ class DetectionComponenet:
 
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
+            self._full_label_text = self._data_config.labels
             labels = self._data_config.labels.split("and")
             labels = [l.strip() for l in labels]
             self._parent_node.get_logger().info(f"Parsed labels: {labels}")
         else:
             labels = []
+            self._full_label_text = None
             self._parent_node.get_logger().info("NO LABELS SPECIFIED!!! DO NOT PROCEED WITHOUT CORRECTING THIS!!!")
         return labels
 
@@ -272,9 +274,10 @@ class DetectionComponenet:
         try:
             self._labels = [l.strip().replace("'", '').replace('"', '') for l in request.labels.split(",")]
             self.setting_labels = True
-            self._detector.set_labels(self._labels)
+            self._full_label_text = " and ".join(self._labels)
+            # self._detector.set_labels(self._labels)
             self.setting_labels = False
-            self._parent_node.get_logger().info(f"setting labels to: {self._labels}")
+            self._parent_node.get_logger().info(f"setting labels to: {self._labels} and full text: {self._full_label_text}")
             response.success = True
         except Exception as e:
             self._parent_node.get_logger().error(f"Failed to set labels: {str(e)}")
@@ -469,7 +472,7 @@ class DetectionComponenet:
         img_msg : Image
             Incoming image message.
         """
-        if self.setting_labels:
+        if self.setting_labels or self._full_label_text is None:
             self._parent_node.get_logger().error("Issue in setting labels while processing queue.")
             return
 
@@ -568,4 +571,4 @@ class DetectionComponenet:
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
 
-            self._parent_node.get_logger().info(f"Published detection for {label} and {self._get_class_id_from_label(label)} at ({x}, {y}, {z})")
+            self._parent_node.get_logger().info(f"Published detection for {label} and {self._get_class_id_from_label(label)} at ({x}, {y}, {z})", throttle_duration_sec=4.0)

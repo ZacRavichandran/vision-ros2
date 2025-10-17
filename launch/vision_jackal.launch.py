@@ -36,7 +36,7 @@ def generate_launch_description():
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="10", # 8 also works for small; 5 for larger model
+        default_value="8", # 8 also works for small; 5 for larger model
         description="number of detections for a track",
     )
 
@@ -97,7 +97,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "Vehicles and Barrels and Persons",
+                "labels": "",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
