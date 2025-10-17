@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 
 from vision_ros2.detector import DetectionComponenet
-from vision_ros2.grounding_dino import GroundingDinoInfer
+# from vision_ros2.grounding_dino import GroundingDinoInfer
 from vision_ros2.florence_model import FlorenceModel
 
 
