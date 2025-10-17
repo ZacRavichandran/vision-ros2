@@ -6,8 +6,8 @@ from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 
 def generate_launch_description():
@@ -30,19 +30,19 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.3",
+        default_value="0.35",
         description="Confidence threshold for detection (default: 0.4)",
     )
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="6",
+        default_value="5",
         description="number of detections for a track",
     )
 
     track_distance_thresh_arg = DeclareLaunchArgument(
         "track_distance_thresh",
-        default_value="5",
+        default_value="5.0",
         description="clustering distance"
     )
 
@@ -79,6 +79,13 @@ def generate_launch_description():
 
     flip_img = LaunchConfiguration("flip_img")
 
+    # vision_pkg = get_package_share_directory("vision_ros2")
+    # static_transforms_launch = PathJoinSubstitution(
+    #     [vision_pkg, "launch", "vision_static_transforms.launch.py"]
+    # )
+
+    # vision_static_ld = IncludeLaunchDescription(static_transforms_launch)
+
     # Node configuration
     grounding_dino_node = Node(
         package="vision_ros2",
@@ -90,7 +97,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "Car and Bus and Barrel and Person",
+                "labels": "Vehicle and Barrel and Person",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
@@ -127,6 +134,7 @@ def generate_launch_description():
             camera_frame_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
+            # vision_static_ld,
             grounding_dino_node,
             # vlm_node,
         ]

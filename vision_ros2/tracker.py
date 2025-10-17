@@ -33,7 +33,7 @@ class Hypothesis:
         self.idx = idx
         self.frame = frame
         self.velocity = np.zeros(3)
-        self.history_weight = 0.95
+        self.history_weight = 0.80
         self.label = label
         self.parent = parent
 

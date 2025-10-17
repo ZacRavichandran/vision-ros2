@@ -3,6 +3,8 @@ import queue
 from dataclasses import dataclass
 from typing import List, Tuple
 
+import cv2
+
 import cv_bridge
 import numpy as np
 import tf2_ros
@@ -12,7 +14,8 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, Image, CompressedImage
+from nav_msgs.msg import Odometry
 from std_msgs.msg import ColorRGBA, Header, String
 from teaming_msgs.msg import Detection, Track
 from teaming_msgs.srv import GetLabels, SetLabels
@@ -43,7 +46,7 @@ class DetectionConfig:
     detection_topic: str = "detections"
     track_topic: str = "tracks"
 
-    detection_viz_image: str = "detection_img"
+    detection_viz_image: str = "detection_img_new"
     detection_viz_3d: str = "detections_marker"
     track_viz_topic: str = "track_markers"
 
@@ -57,13 +60,13 @@ class DetectionConfig:
     # Detection params
     labels: str = ""
     detector_confidence: float = 0.5
-    detection_depth_threshold: float = 15
+    detection_depth_threshold: float = 30.0
     detection_depth_scale: int = 1000
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
 
     # tracker
-    track_distance_thresh: float = 5
+    track_distance_thresh: float = 5.0
     tracker_n_dets: int = 10
 
     detect_period: float = 1e-3
@@ -87,12 +90,15 @@ class DetectionComponenet:
         self._tf_listener = tf2_ros.TransformListener(
             self._tf_buffer, self._parent_node
         )
+        self.latest_transform = None
+        self._last_odom = None
         self._labels = self._parse_labels()
         self._full_label_text = self._data_config.labels
         self._label_set = {}
 
         self.setting_labels = False
         self._marker_count = 0
+        self._track_count = 0
 
         self._tracker = Tracker(
             distance_threshold=self._data_config.track_distance_thresh,
@@ -148,6 +154,9 @@ class DetectionComponenet:
             self._depth_info_cbk,
             img_sub_profile
         )
+        self._odom_sub = self._parent_node.create_subscription(
+            Odometry, "/dlio/odom_node/odom", self._odom_cbk, img_sub_profile
+        )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
             "detector/set_labels",
@@ -170,6 +179,9 @@ class DetectionComponenet:
 
         return self._label_set[label]
 
+    def _odom_cbk(self, odom_msg: Odometry) -> None:
+        self._last_odom = odom_msg
+
     def _process_queue(self) -> None:
         """Read from image queue and run detection.
 
@@ -177,6 +189,26 @@ class DetectionComponenet:
         We want to drop old messages in favor of incoming ones, hence the
         queue logic.
         """
+        # time_to_check = Time()
+        
+        # try:
+        #     # time_to_check = Time()
+        #     self.latest_transform = self._tf_buffer.lookup_transform(
+        #         self._data_config.target_frame,
+        #         self._data_config.camera_frame,
+        #         time_to_check,
+        #         timeout=Duration(seconds=1.0),
+        #     )
+        #     # trans = np.array(
+        #     #     [self.latest_transform.transform.translation.x, self.latest_transform.transform.translation.y, self.latest_transform.transform.translation.z]
+        #     # )
+
+        #     # print(trans, flush=True)
+        # except Exception as ex:  # TODO not good
+        #     self._parent_node.get_logger().error(
+        #         f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
+        #     )
+        
         if not self._img_queue.empty():
             if self._img_queue.qsize():
                 img = self._img_queue.get(block=True)
@@ -187,6 +219,7 @@ class DetectionComponenet:
             self._parent_node.get_logger().error("No images in queue to process. Check image subscription!!!", throttle_duration_sec=5.0)
 
         tracks = self._tracker.get_tracks()
+        # self._parent_node.get_logger().info(f"Publishing {len(tracks)} tracks")
         self._pub_tracks(tracks)
 
     def _img_cbk(self, img_msg: Image) -> None:
@@ -204,6 +237,7 @@ class DetectionComponenet:
         self._img_queue.put(img_msg)
 
     def _depth_cbk(self, depth_msg: Image) -> None:
+        # self._parent_node.get_logger().error("Received depth image!!!!!!")
         self._last_depth = depth_msg
 
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
@@ -270,14 +304,26 @@ class DetectionComponenet:
             self._marker_count = 0
 
     def _pub_tracks(self, tracks: List[Hypothesis]) -> None:
+        # delete all previous tracks
+        delete_all_marker = Marker()
+        delete_all_marker.action = Marker.DELETEALL
+        self._track_viz_pub.publish(delete_all_marker)
+        self._track_count = 0
+
         for track in tracks:
-            track_msg = create_marker_msg(
-                id=track.class_id,
+            track_msg, text_marker = create_marker_msg(
+                id=self._track_count,
                 header=header_from_track(track),
                 position=track.pose,
                 color=ColorRGBA(r=1.0, g=0.75, b=0.0, a=1.0),
+                class_name=track.label,
+                publish_text=True,
+                scale=1.0
             )
             self._track_viz_pub.publish(track_msg)
+            self._track_viz_pub.publish(text_marker)
+            self._track_count += 2
+
             self._track_pub.publish(to_track_msg(track))
 
     def _publish_detection_msg(
@@ -329,9 +375,9 @@ class DetectionComponenet:
         cy = self._intrinsics.k[5]
 
         # depth is given in mm. We convert that to meters
-        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "passthrough")
-        depth_img = self._detector.preprocess_img_depth(depth_img, resize_dims=(640, 480))
-        depth_img = np.array(depth_img, dtype=np.float32)
+        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "32FC1")
+        # depth_img = self._detector.preprocess_img_depth(depth_img, resize_dims=(640, 480))
+        # depth_img = np.array(depth_img, dtype=np.float32)
         # depth_img = decode_img_msg(self._last_depth)
 
         # x, y, w, h = self._unnormalize_coords(x, y, w, h)
@@ -355,7 +401,7 @@ class DetectionComponenet:
             return (0, 0, 0), 0
 
 
-        depth_value = np.median(valid_pixels) # TODO(Ankit): Maybe median makes more sense
+        depth_value = np.mean(valid_pixels) # TODO(Ankit): Maybe median makes more sense
 
         #self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
@@ -366,34 +412,43 @@ class DetectionComponenet:
 
         result_camera_coords = np.array([X, Y, Z])
 
-        try:
-            transform_msg = self._tf_buffer.lookup_transform(
-                self._data_config.target_frame,
-                self._data_config.camera_frame,
-                Time(),
-                timeout=Duration(seconds=1),
-            )
-        except Exception as ex:  # TODO not good
-            self._parent_node.get_logger().error(
-                f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
-            )
+        # try:
+        #     transform_msg = self._tf_buffer.lookup_transform(
+        #         self._data_config.target_frame,
+        #         self._data_config.camera_frame,
+        #         self._parent_node.get_clock().now().to_msg(),
+        #         timeout=Duration(seconds=1),
+        #     )
+        # except Exception as ex:  # TODO not good
+        #     self._parent_node.get_logger().error(
+        #         f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
+        #     )
+        #     return (0, 0, 0), 0
+        if self._last_odom is None:
+            self._parent_node.get_logger().error("Latest odometry or transform is not available in deproject detections!!")
             return (0, 0, 0), 0
+        
+        # transform = self.latest_transform.transform
 
-        transform = transform_msg.transform
+        zed_camera_rot = Rotation.from_quat([
+            -0.5, 0.5, -0.5, 0.5
+        ])
 
         rot = Rotation.from_quat(
             [
-                transform.rotation.x,
-                transform.rotation.y,
-                transform.rotation.z,
-                transform.rotation.w,
+                self._last_odom.pose.pose.orientation.x,
+                self._last_odom.pose.pose.orientation.y,
+                self._last_odom.pose.pose.orientation.z,
+                self._last_odom.pose.pose.orientation.w,
             ]
         )
         trans = np.array(
-            [transform.translation.x, transform.translation.y, transform.translation.z]
+            [self._last_odom.pose.pose.position.x, self._last_odom.pose.pose.position.y, self._last_odom.pose.pose.position.z]
         )
 
-        result_map = rot.as_matrix() @ result_camera_coords + trans
+        # print(trans, flush=True)
+
+        result_map = (rot.as_matrix() @ zed_camera_rot.as_matrix() @ result_camera_coords) + trans
 
         x = result_map[0]
         y = result_map[1]
@@ -450,11 +505,11 @@ class DetectionComponenet:
             color_msg.encoding = "rgb8"
 
             self._annotation_pub.publish(color_msg)
-
+        
         if boxes is None or classes is None or scores is None:
             return
 
-        for box, label in zip(boxes, classes):
+        for box, label, score in zip(boxes, classes, scores):
 
             # if conf < self._data_config.detector_confidence:
             #     continue
@@ -500,7 +555,7 @@ class DetectionComponenet:
             self._tracker.add_detection(
                 time=msg_stamp.sec + msg_stamp.nanosec // 1e9,
                 class_id=self._get_class_id_from_label(label),
-                score=1.0, # TODO(Ankit): Currently hardcoded, replace with actual confidence
+                score=score, # TODO(Ankit): Currently hardcoded, replace with actual confidence
                 pose=np.array([x, y, z]),
                 label=label,
                 frame=self._data_config.target_frame,
@@ -513,4 +568,4 @@ class DetectionComponenet:
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
 
-            self._parent_node.get_logger().info(f"Published detection for {label} at ({x}, {y}, {z})", throttle_duration_sec=3.0)
+            self._parent_node.get_logger().info(f"Published detection for {label} and {self._get_class_id_from_label(label)} at ({x}, {y}, {z})")

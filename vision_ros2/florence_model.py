@@ -108,6 +108,7 @@ class FlorenceModel:
             image = self.bounding_box_annotator.annotate(image, image_detections)
         else:
             image = self.polygon_annotator.annotate(image, image_detections)
+            
         image = self.label_annotator.annotate(image, image_detections)
 
         return image
