@@ -30,13 +30,13 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.35",
+        default_value="0.37", # 0.4 with larger model
         description="Confidence threshold for detection (default: 0.4)",
     )
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="5",
+        default_value="10", # 8 also works for small; 5 for larger model
         description="number of detections for a track",
     )
 
@@ -79,12 +79,12 @@ def generate_launch_description():
 
     flip_img = LaunchConfiguration("flip_img")
 
-    # vision_pkg = get_package_share_directory("vision_ros2")
-    # static_transforms_launch = PathJoinSubstitution(
-    #     [vision_pkg, "launch", "vision_static_transforms.launch.py"]
-    # )
+    vision_pkg = get_package_share_directory("vision_ros2")
+    static_transforms_launch = PathJoinSubstitution(
+        [vision_pkg, "launch", "vision_static_transforms.launch.py"]
+    )
 
-    # vision_static_ld = IncludeLaunchDescription(static_transforms_launch)
+    vision_static_ld = IncludeLaunchDescription(static_transforms_launch)
 
     # Node configuration
     grounding_dino_node = Node(
@@ -97,7 +97,7 @@ def generate_launch_description():
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
                 "config": LaunchConfiguration("config"),
-                "labels": "Vehicle and Barrel and Person",
+                "labels": "Vehicles and Barrels and Persons",
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
@@ -134,7 +134,7 @@ def generate_launch_description():
             camera_frame_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
-            # vision_static_ld,
+            vision_static_ld,
             grounding_dino_node,
             # vlm_node,
         ]

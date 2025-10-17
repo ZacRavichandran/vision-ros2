@@ -33,7 +33,7 @@ class Hypothesis:
         self.idx = idx
         self.frame = frame
         self.velocity = np.zeros(3)
-        self.history_weight = 0.80
+        self.history_weight = 0.90
         self.label = label
         self.parent = parent
 
@@ -108,7 +108,7 @@ class HypothesisSet:
         min_idx = -1
         for idx, hypothesis in enumerate(self.hypotheses):
             dist = np.linalg.norm(hypothesis.pose - pose)
-            if dist < min_hypothesis_dist:
+            if dist < min_hypothesis_dist and label == hypothesis.label:
                 min_hypothesis_dist = dist
                 min_idx = idx
 

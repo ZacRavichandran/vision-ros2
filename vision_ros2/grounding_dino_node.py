@@ -30,7 +30,7 @@ class GroundingDinoNode(Node):
         #     config_path=config,
         # )
 
-        self._florence_infer = FlorenceModel(model_id="microsoft/Florence-2-large", detection_conf=confidence) # TODO(Ankit): Make model_id a parameter
+        self._florence_infer = FlorenceModel(model_id="microsoft/Florence-2-base", detection_conf=confidence) # TODO(Ankit): Make model_id a parameter
 
         self._detection_componenet = DetectionComponenet(self, detector=self._florence_infer)
 
