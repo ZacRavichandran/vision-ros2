@@ -252,7 +252,7 @@ class DetectionComponenet:
         else:
             labels = []
             self._full_label_text = None
-            self._parent_node.get_logger().info("NO LABELS SPECIFIED!!! DO NOT PROCEED WITHOUT CORRECTING THIS!!!")
+            self._parent_node.get_logger().info("NO LABELS SPECIFIED!!! Wait for service call to set labels.")
         return labels
 
     def _load_config(self) -> DetectionConfig:
@@ -473,7 +473,7 @@ class DetectionComponenet:
             Incoming image message.
         """
         if self.setting_labels or self._full_label_text is None:
-            self._parent_node.get_logger().error("Issue in setting labels while processing queue.")
+            self._parent_node.get_logger().error("Issue in setting labels while processing queue.", throttle_duration_sec=4.0)
             return
 
         pred_labels = self._labels.copy()
@@ -510,6 +510,7 @@ class DetectionComponenet:
             self._annotation_pub.publish(color_msg)
         
         if boxes is None or classes is None or scores is None:
+            self._parent_node.get_logger().info("Failed to get detections from detector.", throttle_duration_sec=3.0)
             return
 
         for box, label, score in zip(boxes, classes, scores):
