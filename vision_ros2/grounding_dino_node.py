@@ -14,11 +14,13 @@ class GroundingDinoNode(Node):
 
         # self.declare_parameter("weights", "")
         self.declare_parameter("confidence", 0.3)
+        self.declare_parameter("model_choice", "base")
         # self.declare_parameter("config", "")
 
         # weights = self.get_parameter("weights").get_parameter_value().string_value
         confidence = self.get_parameter("confidence").get_parameter_value().double_value
         # config = self.get_parameter("config").get_parameter_value().string_value
+        model_choice = self.get_parameter("model_choice").get_parameter_value().string_value
 
         # print(weights)
         # print(config)
@@ -29,8 +31,15 @@ class GroundingDinoNode(Node):
         #     classes=["chair", "desk"],
         #     config_path=config,
         # )
-
-        self._florence_infer = FlorenceModel(model_id="microsoft/Florence-2-base", detection_conf=confidence) # TODO(Ankit): Make model_id a parameter
+        if model_choice == "base":
+            self.get_logger().info("Using Florence-2-base model for inference.")
+            self._florence_infer = FlorenceModel(model_id="microsoft/Florence-2-base", detection_conf=confidence)
+        elif model_choice == "large":
+            self.get_logger().info("Using Florence-2-large model for inference.")
+            self._florence_infer = FlorenceModel(model_id="microsoft/Florence-2-large", detection_conf=confidence) # TODO(Ankit): Make model_id a parameter
+        else:
+            self.get_logger().error(f"Invalid model_choice parameter: {model_choice}. Must be 'base' or 'large'.")
+            raise ValueError(f"Invalid model_choice parameter: {model_choice}. Must be 'base' or 'large'.")
 
         self._detection_componenet = DetectionComponenet(self, detector=self._florence_infer)
 

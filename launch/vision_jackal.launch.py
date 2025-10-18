@@ -34,6 +34,12 @@ def generate_launch_description():
         description="Confidence threshold for detection (default: 0.4)",
     )
 
+    model_choice_arg = DeclareLaunchArgument(
+        "model_choice",
+        default_value="base",
+        description="Model choice for Florence (base or large)",
+    )
+
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
         default_value="5", # 8 also works for small; 5 for larger model
@@ -96,6 +102,7 @@ def generate_launch_description():
             {
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
+                "model_choice": LaunchConfiguration("model_choice"),
                 "config": LaunchConfiguration("config"),
                 "labels": "",
                 "camera_frame": LaunchConfiguration("camera_frame"),
@@ -126,6 +133,7 @@ def generate_launch_description():
             namespace_arg,
             weights_arg,
             confidence_arg,
+            model_choice_arg,
             flip_img_arg,
             config_arg,
             input_rgb_topic_arg,
