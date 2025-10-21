@@ -22,6 +22,7 @@ class Hypothesis:
         frame: str,
         label: str = "",
         parent: str = "",
+        is_published: bool = False,
     ) -> None:
         self.n_detections = 0
         self.class_id = class_id
@@ -54,6 +55,7 @@ class Hypothesis:
         self.time = time
         self.score = score
         self.n_detections += 1
+        self.is_published = False
 
     def compute_vel(self, history: int = 25):
         pose_history = np.array(self.poses)[-history:]

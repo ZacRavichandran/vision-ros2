@@ -98,7 +98,8 @@ class DetectionComponenet:
 
         self.setting_labels = False
         self._marker_count = 0
-        self._track_count = 0
+        self._total_track_count = 0
+        self._old_track_count = 0
 
         self._tracker = Tracker(
             distance_threshold=self._data_config.track_distance_thresh,
@@ -311,11 +312,12 @@ class DetectionComponenet:
         delete_all_marker = Marker()
         delete_all_marker.action = Marker.DELETEALL
         self._track_viz_pub.publish(delete_all_marker)
-        self._track_count = 0
+        self._total_track_count = 0
+        self._old_track_count = 0
 
         for track in tracks:
             track_msg, text_marker = create_marker_msg(
-                id=self._track_count,
+                id=self._total_track_count,
                 header=header_from_track(track),
                 position=track.pose,
                 color=ColorRGBA(r=1.0, g=0.75, b=0.0, a=1.0),
@@ -325,13 +327,21 @@ class DetectionComponenet:
             )
             self._track_viz_pub.publish(track_msg)
             self._track_viz_pub.publish(text_marker)
-            self._track_count += 2
+            self._total_track_count += 2
 
             # self._parent_node.get_logger().info(f"Publishing track for {track.label} with id {track.idx} with class id {track.class_id} at pose ({track.pose[0]}, {track.pose[1]}, {track.pose[2]}) with frame {track.frame} at time {track.time}")
 
-            self._track_pub.publish(to_track_msg(track))
-        
-        self._parent_node.get_logger().info(f"Published {self._track_count//2} tracks so far.", throttle_duration_sec=4.0)
+            if track.is_published == False:
+                self._track_pub.publish(to_track_msg(track))
+                # print(f"Track idx {track.idx} and hypotheses length {len(self._tracker.hypotheses[track.label].hypotheses)}", flush=True)
+                # self._tracker.hypotheses[track.label].hypotheses[track.idx].is_published = True
+                track.is_published = True
+                # print(self._tracker.hypotheses.values(), flush=True)
+            else:
+                self._old_track_count += 1
+
+
+        self._parent_node.get_logger().info(f"Published {self._total_track_count//2} total tracks with {len(tracks)-self._old_track_count} new tracks", throttle_duration_sec=4.0)
 
 
     def _publish_detection_msg(
@@ -562,7 +572,7 @@ class DetectionComponenet:
             msg_stamp = img_msg.header.stamp
 
             self._tracker.add_detection(
-                time=msg_stamp.sec + msg_stamp.nanosec // 1e9,
+                time=msg_stamp.sec + msg_stamp.nanosec / 1e9,
                 class_id=self._get_class_id_from_label(label),
                 score=score, # TODO(Ankit): Currently hardcoded, replace with actual confidence
                 pose=np.array([x, y, z]),
