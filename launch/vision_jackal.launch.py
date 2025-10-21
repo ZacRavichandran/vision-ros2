@@ -82,8 +82,12 @@ def generate_launch_description():
     flip_img_arg = DeclareLaunchArgument(
         "flip_img", default_value="False", description="config path"
     )
+    scale_depth_arg = DeclareLaunchArgument(
+        "scale_depth", default_value="True", description="depth scaling factor"
+    )
 
     flip_img = LaunchConfiguration("flip_img")
+    scale_depth = LaunchConfiguration("scale_depth")
 
     vision_pkg = get_package_share_directory("vision_ros2")
     static_transforms_launch = PathJoinSubstitution(
@@ -108,7 +112,8 @@ def generate_launch_description():
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
-                "flip_img": flip_img
+                "flip_img": flip_img,
+                "scale_depth": scale_depth
             }
         ],
         remappings=[
@@ -116,6 +121,8 @@ def generate_launch_description():
             ("image_raw", LaunchConfiguration("input_rgb_topic")),
             ("depth_raw", LaunchConfiguration("input_depth_topic")),
             ("camera_info", LaunchConfiguration("camera_info_topic")),
+            ("/dlio/odom_node/odom", "/odom"),
+
         ],
     )
 
@@ -135,6 +142,7 @@ def generate_launch_description():
             confidence_arg,
             model_choice_arg,
             flip_img_arg,
+            scale_depth_arg,
             config_arg,
             input_rgb_topic_arg,
             input_depth_topic_arg,

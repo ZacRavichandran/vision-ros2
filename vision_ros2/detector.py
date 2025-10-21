@@ -74,6 +74,8 @@ class DetectionConfig:
 
     flip_img: bool = False
 
+    scale_depth: bool = False
+
 
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
@@ -277,6 +279,7 @@ class DetectionComponenet:
             self._labels = [l.strip().replace("'", '').replace('"', '') for l in request.labels.split(",")]
             self.setting_labels = True
             self._full_label_text = " and ".join(self._labels)
+            # self._full_label_text += " and Pencil"
             # self._detector.set_labels(self._labels)
             self.setting_labels = False
             self._parent_node.get_logger().info(f"setting labels to: {self._labels} and full text: {self._full_label_text}")
@@ -398,6 +401,10 @@ class DetectionComponenet:
         # depth_img = self._detector.preprocess_img_depth(depth_img, resize_dims=(640, 480))
         # depth_img = np.array(depth_img, dtype=np.float32)
         # depth_img = decode_img_msg(self._last_depth)
+
+        # Convert to meters
+        if self._data_config.scale_depth:
+            depth_img = depth_img / self._data_config.detection_depth_scale
 
         # x, y, w, h = self._unnormalize_coords(x, y, w, h)
         
