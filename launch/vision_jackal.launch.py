@@ -83,7 +83,7 @@ def generate_launch_description():
         "flip_img", default_value="False", description="config path"
     )
     scale_depth_arg = DeclareLaunchArgument(
-        "scale_depth", default_value="True", description="depth scaling factor"
+        "scale_depth", default_value="False", description="depth scaling factor"
     )
 
     flip_img = LaunchConfiguration("flip_img")
