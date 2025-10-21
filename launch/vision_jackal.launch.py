@@ -30,13 +30,13 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.3", # 0.4 with larger model
+        default_value="0.25", # 0.4 with larger model
         description="Confidence threshold for detection (default: 0.4)",
     )
 
     model_choice_arg = DeclareLaunchArgument(
         "model_choice",
-        default_value="base",
+        default_value="large",
         description="Model choice for Florence (base or large)",
     )
 
@@ -48,7 +48,7 @@ def generate_launch_description():
 
     track_distance_thresh_arg = DeclareLaunchArgument(
         "track_distance_thresh",
-        default_value="5.0",
+        default_value="8.0",
         description="clustering distance"
     )
 
