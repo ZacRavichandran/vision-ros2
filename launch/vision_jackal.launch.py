@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.25", # 0.4 with larger model
+        default_value="0.3", # 0.4 with larger model
         description="Confidence threshold for detection (default: 0.4)",
     )
 

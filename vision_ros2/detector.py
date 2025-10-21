@@ -217,7 +217,8 @@ class DetectionComponenet:
             else:
                 self._parent_node.get_logger().error("No images in queue to process in inner IF condition. Check image queue!!!", throttle_duration_sec=5.0)
         else:
-            self._parent_node.get_logger().error("No images in queue to process. Check image subscription!!!", throttle_duration_sec=5.0)
+            return
+            # self._parent_node.get_logger().debug("No images in queue to process. Check image subscription!!!", throttle_duration_sec=5.0)
 
         tracks = self._tracker.get_tracks()
         # self._parent_node.get_logger().info(f"Publishing {len(tracks)} tracks")
@@ -238,7 +239,7 @@ class DetectionComponenet:
         self._img_queue.put(img_msg)
 
     def _depth_cbk(self, depth_msg: Image) -> None:
-        # self._parent_node.get_logger().error("Received depth image!!!!!!")
+        # self._parent_node.get_logger().debug("Received depth image!!!!!!")
         self._last_depth = depth_msg
 
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
@@ -341,7 +342,7 @@ class DetectionComponenet:
                 self._old_track_count += 1
 
 
-        self._parent_node.get_logger().info(f"Published {self._total_track_count//2} total tracks with {len(tracks)-self._old_track_count} new tracks", throttle_duration_sec=4.0)
+        # self._parent_node.get_logger().info(f"Published {self._total_track_count//2} total tracks with {len(tracks)-self._old_track_count} new tracks", throttle_duration_sec=4.0)
 
 
     def _publish_detection_msg(
@@ -488,7 +489,7 @@ class DetectionComponenet:
             Incoming image message.
         """
         if self.setting_labels or self._full_label_text is None:
-            self._parent_node.get_logger().error("Issue in setting labels while processing queue.", throttle_duration_sec=4.0)
+            # self._parent_node.get_logger().debug("Issue in setting labels while processing queue.", throttle_duration_sec=4.0)
             return
 
         pred_labels = self._labels.copy()
