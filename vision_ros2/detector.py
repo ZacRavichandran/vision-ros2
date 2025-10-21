@@ -327,11 +327,11 @@ class DetectionComponenet:
             self._track_viz_pub.publish(text_marker)
             self._track_count += 2
 
-            self._parent_node.get_logger().info(f"Publishing track for {track.label} with id {track.idx} with class id {track.class_id} at pose ({track.pose[0]}, {track.pose[1]}, {track.pose[2]}) with frame {track.frame} at time {track.time}")
+            # self._parent_node.get_logger().info(f"Publishing track for {track.label} with id {track.idx} with class id {track.class_id} at pose ({track.pose[0]}, {track.pose[1]}, {track.pose[2]}) with frame {track.frame} at time {track.time}")
 
             self._track_pub.publish(to_track_msg(track))
         
-        self._parent_node.get_logger().info(f"Published {self._track_count//2} tracks so far.")
+        self._parent_node.get_logger().info(f"Published {self._track_count//2} tracks so far.", throttle_duration_sec=4.0)
 
 
     def _publish_detection_msg(
