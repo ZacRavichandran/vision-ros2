@@ -121,7 +121,6 @@ def generate_launch_description():
             ("image_raw", LaunchConfiguration("input_rgb_topic")),
             ("depth_raw", LaunchConfiguration("input_depth_topic")),
             ("camera_info", LaunchConfiguration("camera_info_topic")),
-            ("/dlio/odom_node/odom", "/odom"),
 
         ],
     )
