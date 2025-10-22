@@ -52,6 +52,12 @@ def generate_launch_description():
         description="clustering distance"
     )
 
+    labels_arg = DeclareLaunchArgument(
+        "labels",
+        default_value="labels",
+        description="clustering distance"
+    )
+
     config_arg = DeclareLaunchArgument(
         "config", default_value=default_config_path, description="config path"
     )
@@ -108,7 +114,7 @@ def generate_launch_description():
                 "confidence": LaunchConfiguration("confidence"),
                 "model_choice": LaunchConfiguration("model_choice"),
                 "config": LaunchConfiguration("config"),
-                "labels": "",
+                "labels": LaunchConfiguration("labels"),
                 "camera_frame": LaunchConfiguration("camera_frame"),
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
@@ -141,6 +147,7 @@ def generate_launch_description():
             confidence_arg,
             model_choice_arg,
             flip_img_arg,
+            labels_arg,
             scale_depth_arg,
             config_arg,
             input_rgb_topic_arg,
