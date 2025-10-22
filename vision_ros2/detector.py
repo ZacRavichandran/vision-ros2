@@ -46,7 +46,7 @@ class DetectionConfig:
     detection_topic: str = "detections"
     track_topic: str = "tracks"
 
-    detection_viz_image: str = "detection_img_new"
+    detection_viz_image: str = "detection_img"
     detection_viz_3d: str = "detections_marker"
     track_viz_topic: str = "track_markers"
 
