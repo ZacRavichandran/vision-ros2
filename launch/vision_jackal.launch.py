@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.3", # 0.4 with larger model
+        default_value="0.25", # 0.25 for Spot 0.3 for Rest
         description="Confidence threshold for detection (default: 0.4)",
     )
 
@@ -38,6 +38,12 @@ def generate_launch_description():
         "model_choice",
         default_value="large",
         description="Model choice for Florence (base or large)",
+    )
+
+    camera_transform_arg = DeclareLaunchArgument(
+        "camera_transform",
+        default_value="spot_camera",
+        description="which camera transform to use",
     )
 
     tracker_n_dets_arg = DeclareLaunchArgument(
@@ -48,13 +54,13 @@ def generate_launch_description():
 
     track_distance_thresh_arg = DeclareLaunchArgument(
         "track_distance_thresh",
-        default_value="8.0",
+        default_value="6.0",
         description="clustering distance"
     )
 
     labels_arg = DeclareLaunchArgument(
         "labels",
-        default_value="labels",
+        default_value="Persons and Vehicles",
         description="clustering distance"
     )
 
@@ -89,7 +95,7 @@ def generate_launch_description():
         "flip_img", default_value="False", description="config path"
     )
     scale_depth_arg = DeclareLaunchArgument(
-        "scale_depth", default_value="False", description="depth scaling factor"
+        "scale_depth", default_value="True", description="depth scaling factor"
     )
 
     flip_img = LaunchConfiguration("flip_img")
@@ -119,7 +125,8 @@ def generate_launch_description():
                 "tracker_n_dets": LaunchConfiguration("tracker_n_dets"),
                 "track_distance_thresh": LaunchConfiguration("track_distance_thresh"),
                 "flip_img": flip_img,
-                "scale_depth": scale_depth
+                "scale_depth": scale_depth,
+                "camera_transform": LaunchConfiguration("camera_transform"),
             }
         ],
         remappings=[
@@ -154,6 +161,7 @@ def generate_launch_description():
             input_depth_topic_arg,
             input_camera_info_arg,
             camera_frame_arg,
+            camera_transform_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
             vision_static_ld,

@@ -57,11 +57,13 @@ class DetectionConfig:
 
     camera_frame: str = "camera_optical_frame"
 
+    camera_transform: str = "spot_camera"
+
     # Detection params
     labels: str = ""
     detector_confidence: float = 0.5
     detection_depth_threshold: float = 30.0
-    detection_depth_scale: int = 1000
+    detection_depth_scale: float = 1000.0
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
 
@@ -110,6 +112,8 @@ class DetectionComponenet:
 
         self._parent_node.get_logger().info(f"config tracker with thresh: {self._data_config.track_distance_thresh}")
         self._parent_node.get_logger().info(f"Raw label text: {self._full_label_text}")
+        self._parent_node.get_logger().info(f"Camera Transform is : {self._data_config.camera_transform}")
+        self._parent_node.get_logger().info(f"Scale depth is : {self._data_config.scale_depth}")
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -235,16 +239,18 @@ class DetectionComponenet:
         img_msg : Image
             Input image
         """
+        # self._parent_node.get_logger().info("Received color image!!!!!!")
         while self._data_config.drop_old_msg and not self._img_queue.empty():
             self._img_queue.get(block=False)
  
         self._img_queue.put(img_msg)
 
     def _depth_cbk(self, depth_msg: Image) -> None:
-        # self._parent_node.get_logger().debug("Received depth image!!!!!!")
+        # self._parent_node.get_logger().info("Received depth image!!!!!!")
         self._last_depth = depth_msg
 
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
+        # self._parent_node.get_logger().info("Received depth info topic!!!!!!")
         self._intrinsics = camera_info
 
     def _parse_labels(self) -> List[str]:
@@ -397,14 +403,17 @@ class DetectionComponenet:
         cy = self._intrinsics.k[5]
 
         # depth is given in mm. We convert that to meters
-        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "32FC1")
+        if self._data_config.camera_transform == "spot_camera":
+            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "16UC1")
+        else:
+            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "32FC1")
         # depth_img = self._detector.preprocess_img_depth(depth_img, resize_dims=(640, 480))
         # depth_img = np.array(depth_img, dtype=np.float32)
         # depth_img = decode_img_msg(self._last_depth)
 
         # Convert to meters
         if self._data_config.scale_depth:
-            depth_img = depth_img / self._data_config.detection_depth_scale
+            depth_img = depth_img.astype(np.float32) / self._data_config.detection_depth_scale
 
         # x, y, w, h = self._unnormalize_coords(x, y, w, h)
         
@@ -426,8 +435,11 @@ class DetectionComponenet:
         if len(valid_pixels) == 0:
             return (0, 0, 0), 0
 
-
-        depth_value = np.mean(valid_pixels) # TODO(Ankit): Maybe median makes more sense
+        if self._data_config.camera_transform == "spot_camera":
+            depth_value = np.percentile(valid_pixels, 97)
+        else:
+            depth_value = np.mean(valid_pixels)
+        # self._parent_node.get_logger().info(f"depth value percentile: {depth_value}, depth value max: {valid_pixels.max()}, depth value mean: {valid_pixels.mean()}, depth value count: {len(valid_pixels)}")
 
         #self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
@@ -456,9 +468,16 @@ class DetectionComponenet:
         
         # transform = self.latest_transform.transform
 
-        zed_camera_rot = Rotation.from_quat([
-            -0.5, 0.5, -0.5, 0.5
-        ])
+        if self._data_config.camera_transform == "spot_camera":
+            # self._parent_node.get_logger().info("Using spot camera transform for deprojection.")
+            zed_camera_rot = Rotation.from_quat([
+                0.143, 0.812, -0.229, 0.518
+            ])
+        else:
+            # self._parent_node.get_logger().info("Using default camera transform for deprojection.")
+            zed_camera_rot = Rotation.from_quat([
+                -0.5, 0.5, -0.5, 0.5
+            ])
 
         rot = Rotation.from_quat(
             [
@@ -500,6 +519,8 @@ class DetectionComponenet:
             return
 
         pred_labels = self._labels.copy()
+
+        # self._parent_node.get_logger().info(f"Running detection with labels: {pred_labels}")
 
         # convert ros image message to a numpy array
         img = decode_img_msg(img_msg)
@@ -595,4 +616,4 @@ class DetectionComponenet:
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
 
-            self._parent_node.get_logger().info(f"Published detection for {label} and {self._get_class_id_from_label(label)} at ({x}, {y}, {z})", throttle_duration_sec=4.0)
+            self._parent_node.get_logger().info(f"Published detection for {label} with score {score} at ({x}, {y}, {z}) with depth {depth_point}", throttle_duration_sec=4.0)
