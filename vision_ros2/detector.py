@@ -18,6 +18,7 @@ from teaming_msgs.msg import Detection, Track
 from teaming_msgs.srv import GetLabels, SetLabels
 from vision_msgs.msg import ObjectHypothesisWithPose
 from visualization_msgs.msg import Marker
+from nav_msgs.msg import Odometry
 
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg, decode_img_msg
@@ -82,6 +83,7 @@ class DetectionComponenet:
 
         self._intrinsics = None
         self._last_depth = None
+        self._last_odom = None
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(
             self._tf_buffer, self._parent_node
@@ -145,6 +147,9 @@ class DetectionComponenet:
             self._depth_info_cbk,
             img_sub_profile
         )
+        self._odom_sub = self._parent_node.create_subscription(
+            Odometry, "/dlio/odom_node/odom", self._odom_cbk, img_sub_profile
+        )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
             "detector/set_labels",
@@ -166,6 +171,9 @@ class DetectionComponenet:
             self._label_set[label] = len(self._label_set)
 
         return self._label_set[label]
+    
+    def _odom_cbk(self, odom_msg: Odometry) -> None:
+        self._last_odom = odom_msg
 
     def _process_queue(self) -> None:
         """Read from image queue and run detection.
@@ -356,34 +364,45 @@ class DetectionComponenet:
 
         result_camera_coords = np.array([X, Y, Z])
 
-        try:
-            transform_msg = self._tf_buffer.lookup_transform(
-                self._data_config.target_frame,
-                self._data_config.camera_frame,
-                Time(),
-                timeout=Duration(seconds=1),
-            )
-        except Exception as ex:  # TODO not good
-            self._parent_node.get_logger().info(
-                f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
-            )
+        if self._last_odom is None:
+            self._parent_node.get_logger().error("Latest odometry or transform is not available in deproject detections!!")
             return (0, 0, 0), 0
 
-        transform = transform_msg.transform
+        # try:
+        #     transform_msg = self._tf_buffer.lookup_transform(
+        #         self._data_config.target_frame,
+        #         self._data_config.camera_frame,
+        #         Time(),
+        #         timeout=Duration(seconds=1),
+        #     )
+        # except Exception as ex:  # TODO not good
+        #     self._parent_node.get_logger().info(
+        #         f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
+        #     )
+        #     return (0, 0, 0), 0
+
+        # transform = transform_msg.transform
+
+        zed_camera_rot = Rotation.from_quat([
+                -0.5, 0.5, -0.5, 0.5
+            ])
 
         rot = Rotation.from_quat(
             [
-                transform.rotation.x,
-                transform.rotation.y,
-                transform.rotation.z,
-                transform.rotation.w,
+                self._last_odom.pose.pose.orientation.x,
+                self._last_odom.pose.pose.orientation.y,
+                self._last_odom.pose.pose.orientation.z,
+                self._last_odom.pose.pose.orientation.w,
             ]
         )
         trans = np.array(
-            [transform.translation.x, transform.translation.y, transform.translation.z]
+            [self._last_odom.pose.pose.position.x, 
+             self._last_odom.pose.pose.position.y, 
+             self._last_odom.pose.pose.position.z]
         )
 
-        result_map = rot.as_matrix() @ result_camera_coords + trans
+        result_map = (rot.as_matrix() @ zed_camera_rot.as_matrix() @ result_camera_coords) + trans
+
 
         x = result_map[0]
         y = result_map[1]
