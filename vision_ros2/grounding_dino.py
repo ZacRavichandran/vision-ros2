@@ -61,7 +61,7 @@ class GroundingDinoInfer:
 
         transform = T.Compose(
             [
-                T.RandomResize([800], max_size=1333),
+                # T.RandomResize([800], max_size=1333),
                 T.ToTensor(),
                 T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
@@ -197,7 +197,7 @@ class GroundingDinoInfer:
         )
 
         if len(boxes) == 0:
-            img_pil = img_pil.resize((640, 360))
+            # img_pil = img_pil.resize((640, 360))
             img_pil = np.asarray(img_pil)
 
             return img_pil, "", np.array([]), np.array([])

@@ -55,22 +55,26 @@ class DetectionConfig:
 
     camera_frame: str = "camera_optical_frame"
 
+    camera_transform : str = "spot_camera"
+
     # Detection params
     labels: str = ""
     detector_confidence: float = 0.5
     detection_depth_threshold: float = 15
-    detection_depth_scale: int = 1000
+    detection_depth_scale: float = 1000.0
     detection_publish_deprojection: bool = True
     detection_max_marker_count: int = 1000
 
     # tracker
-    track_distance_thresh: float = 5
+    track_distance_thresh: float = 5.0
     tracker_n_dets: int = 10
 
-    detect_period: float = 1e-3
+    detect_period: float = 0.05
 
 
     flip_img: bool = False
+
+    scale_depth: bool = False
 
 
 class DetectionComponenet:
@@ -93,13 +97,17 @@ class DetectionComponenet:
 
         self.setting_labels = False
         self._marker_count = 0
+        self._total_track_count = 0
 
         self._tracker = Tracker(
             distance_threshold=self._data_config.track_distance_thresh,
             n_track_thresh=self._data_config.tracker_n_dets,
         )
 
-        self._parent_node.get_logger().info("config tracker with thresh: {self._data_config.track_distance_thresh}")
+        self._parent_node.get_logger().info(f"config tracker with thresh: {self._data_config.track_distance_thresh}")
+        self._parent_node.get_logger().info(f"Camera Transform is : {self._data_config.camera_transform}")
+        self._parent_node.get_logger().info(f"Scale depth is : {self._data_config.scale_depth}")
+        self._parent_node.get_logger().info(f"Labels: {self._labels}")
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -148,7 +156,7 @@ class DetectionComponenet:
             img_sub_profile
         )
         self._odom_sub = self._parent_node.create_subscription(
-            Odometry, "/dlio/odom_node/odom", self._odom_cbk, img_sub_profile
+            Odometry, "/odom", self._odom_cbk, img_sub_profile
         )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
@@ -199,21 +207,27 @@ class DetectionComponenet:
         img_msg : Image
             Input image
         """
+        # self._parent_node.get_logger().info("Received image msg!")
         while self._data_config.drop_old_msg and not self._img_queue.empty():
             self._img_queue.get(block=False)
  
         self._img_queue.put(img_msg)
 
     def _depth_cbk(self, depth_msg: Image) -> None:
+        # self._parent_node.get_logger().info("Received depth msg!")
         self._last_depth = depth_msg
 
     def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
+        # self._parent_node.get_logger().info("Received depth info msg!")
         self._intrinsics = camera_info
 
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
             labels = self._data_config.labels.split(",")
             labels = [l.strip() for l in labels]
+            self.setting_labels = True
+            self._detector.set_labels(labels)
+            self.setting_labels = False
         else:
             labels = []
         return labels
@@ -269,15 +283,29 @@ class DetectionComponenet:
             self._marker_count = 0
 
     def _pub_tracks(self, tracks: List[Hypothesis]) -> None:
+        # delete all previous tracks
+        delete_all_marker = Marker()
+        delete_all_marker.action = Marker.DELETEALL
+        self._track_viz_pub.publish(delete_all_marker)
+        self._total_track_count = 0
+
         for track in tracks:
-            track_msg = create_marker_msg(
-                id=track.class_id,
+            track_msg, text_marker = create_marker_msg(
+                id=self._total_track_count,
                 header=header_from_track(track),
                 position=track.pose,
                 color=ColorRGBA(r=1.0, g=0.75, b=0.0, a=1.0),
+                class_name=track.label,
+                publish_text=True,
+                scale=1.0,
             )
             self._track_viz_pub.publish(track_msg)
-            self._track_pub.publish(to_track_msg(track))
+            self._track_viz_pub.publish(text_marker)
+            self._total_track_count += 2
+            
+            if track.is_published == False:
+                self._track_pub.publish(to_track_msg(track))
+                track.is_published = True
 
     def _publish_detection_msg(
         self,
@@ -327,10 +355,13 @@ class DetectionComponenet:
         cx = self._intrinsics.k[2]
         cy = self._intrinsics.k[5]
 
-        # depth is given in mm. We convert that to meters
-        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "passthrough")
-        depth_img = np.array(depth_img, dtype=np.float32)
-        # depth_img = decode_img_msg(self._last_depth)
+        if self._data_config.camera_transform == "spot_camera":
+            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "16UC1")
+        else:
+            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "32FC1")
+        
+        if self._data_config.scale_depth:
+            depth_img = depth_img.astype(np.float32) / self._data_config.detection_depth_scale
 
         x, y, w, h = self._unnormalize_coords(x, y, w, h)
         
@@ -353,7 +384,10 @@ class DetectionComponenet:
             return (0, 0, 0), 0
 
 
-        depth_value = np.mean(valid_pixels)
+        if self._data_config.camera_transform == "spot_camera":
+            depth_value = np.percentile(valid_pixels, 96)
+        else:
+            depth_value = np.mean(valid_pixels)
 
         #self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
@@ -383,7 +417,14 @@ class DetectionComponenet:
 
         # transform = transform_msg.transform
 
-        zed_camera_rot = Rotation.from_quat([
+        if self._data_config.camera_transform == "spot_camera":
+            # self._parent_node.get_logger().info("Using spot camera transform for deprojection.")
+            zed_camera_rot = Rotation.from_quat([
+                0.143, 0.812, -0.229, 0.518
+            ])
+        else:
+            # self._parent_node.get_logger().info("Using default camera transform for deprojection.")
+            zed_camera_rot = Rotation.from_quat([
                 -0.5, 0.5, -0.5, 0.5
             ])
 
@@ -495,7 +536,7 @@ class DetectionComponenet:
             msg_stamp = img_msg.header.stamp
 
             self._tracker.add_detection(
-                time=msg_stamp.sec + msg_stamp.nanosec // 1e9,
+                time=msg_stamp.sec + msg_stamp.nanosec / 1e9,
                 class_id=self._get_class_id_from_label(label),
                 score=conf,
                 pose=np.array([x, y, z]),
@@ -509,3 +550,6 @@ class DetectionComponenet:
                 label=label,
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
+
+            self._parent_node.get_logger().info(
+                f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}", throttle_duration_sec=4.0)
