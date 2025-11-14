@@ -22,6 +22,7 @@ from nav_msgs.msg import Odometry
 
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg, decode_img_msg
+import cv2
 
 
 class Detector:
@@ -224,7 +225,7 @@ class DetectionComponenet:
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
             labels = self._data_config.labels.split(",")
-            labels = [l.strip() for l in labels]
+            labels = [l.strip().replace("'", '').replace('"', '') for l in labels]
             self.setting_labels = True
             self._detector.set_labels(labels)
             self.setting_labels = False
@@ -328,11 +329,11 @@ class DetectionComponenet:
         self._detection_pub.publish(detection_msg)
 
     def _unnormalize_coords(
-        self, norm_x: float, norm_y: float, norm_w: float, norm_h: float
+        self, norm_x: float, norm_y: float, norm_w: float, norm_h: float, img_height: int, img_width: int
     ) -> Tuple[int, int, int, int]:
         # Get image dimensions
-        img_width = self._intrinsics.width  # 640
-        img_height = self._intrinsics.height  # 360
+        # img_width = self._intrinsics.width  # 640
+        # img_height = self._intrinsics.height  # 360
 
         # Convert normalized to pixel coordinates
         pixel_x = int(norm_x * img_width)
@@ -343,7 +344,7 @@ class DetectionComponenet:
         return pixel_x, pixel_y, pixel_width, pixel_height
 
     def _deproject_detections(
-        self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time
+        self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time, img_height: int, img_width: int
     ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
         if self._intrinsics is None or self._last_depth is None:
@@ -363,16 +364,52 @@ class DetectionComponenet:
         if self._data_config.scale_depth:
             depth_img = depth_img.astype(np.float32) / self._data_config.detection_depth_scale
 
-        x, y, w, h = self._unnormalize_coords(x, y, w, h)
+        x, y, w, h = self._unnormalize_coords(x, y, w, h, img_height, img_width)
         
         # self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
 
         x_min = round(max(0, x - w / 2))
-        x_max = round(min(self._intrinsics.width - 1, x + w // 2))
+        x_max = round(min(img_width - 1, x + w // 2))
         y_min = round(max(0, y - h / 2))
-        y_max = round(min(self._intrinsics.height - 1, y + h // 2))
+        y_max = round(min(img_height - 1, y + h // 2))
 
         #self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
+
+        # Rotate coordinates by 90 degrees anticlockwise if using spot camera
+        if self._data_config.camera_transform == "spot_camera":
+            box_points = np.array([
+                [x_min, y_min],
+                [x_max, y_max],
+            ])
+            img_center_point = np.array([[img_width // 2, -img_height // 2], 
+                                         [img_width // 2, -img_height // 2]], dtype=np.int32)
+            rot_mat = np.array([[0, 1], [-1, 0]])
+
+            # print(box_points, flush=True)
+            # print(img_center_point, flush=True)
+
+            print(f"box_points: {box_points}", flush=True)
+            
+            box_points -= img_center_point
+
+            print(f"box_points after centering: {box_points}", flush=True)
+            box_points_rotated = box_points @ rot_mat.T
+            print(f"box_points_rotated: {box_points_rotated}", flush=True)
+            box_points_rotated += img_center_point
+
+            print(f"box_points_rotated: {box_points_rotated}", flush=True)
+
+            x_min, y_min = box_points_rotated[0]
+            x_max, y_max = box_points_rotated[1]
+
+            x_min = int(np.clip(x_min, 0, img_width - 1))
+            x_max = int(np.clip(x_max, 0, img_width - 1))
+            y_min = int(np.clip(y_min, 0, img_height - 1))
+            y_max = int(np.clip(y_max, 0, img_height - 1))
+
+            x = int((x_min + x_max) / 2)
+            y = int((y_min + y_max) / 2)
+
 
         # Extract the region
         region = depth_img[y_min : y_max + 1, x_min : x_max + 1]
@@ -511,6 +548,8 @@ class DetectionComponenet:
                 #w=box[0] - box[2],
                 #h=box[1] - box[3],
                 time=img_msg.header.stamp,
+                img_height=pred_color.shape[0],
+                img_width=pred_color.shape[1],
             )
 
             # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")

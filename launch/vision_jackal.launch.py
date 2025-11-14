@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.5", # 0.4 for Zed 0.5 for Spot
+        default_value="0.4", # 0.4 for Zed 0.5 for Spot
         description="Confidence threshold for detection (default: 0.4)",
     )
 

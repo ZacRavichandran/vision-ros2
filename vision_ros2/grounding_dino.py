@@ -58,6 +58,7 @@ class GroundingDinoInfer:
 
     def preprocess_img(self, img: np.ndarray):
         image_pil = Image.fromarray(img).convert("RGB")  # load image
+        image_pil = image_pil.rotate(-90, expand=False)  # rotate to correct orientation
 
         transform = T.Compose(
             [
