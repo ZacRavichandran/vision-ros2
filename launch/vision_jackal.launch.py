@@ -34,16 +34,10 @@ def generate_launch_description():
         description="Confidence threshold for detection (default: 0.4)",
     )
 
-    model_choice_arg = DeclareLaunchArgument(
-        "model_choice",
-        default_value="large",
-        description="Model choice for Florence (base or large)",
-    )
-
     camera_transform_arg = DeclareLaunchArgument(
         "camera_transform",
         default_value="spot_camera",
-        description="which camera transform to use",
+        description="which camera transform to use. Options: spot_camera, zed_camera",
     )
 
     tracker_n_dets_arg = DeclareLaunchArgument(
@@ -86,6 +80,12 @@ def generate_launch_description():
         description="camera info",
     )
 
+    input_odom_topic_arg = DeclareLaunchArgument(
+        "input_odom_topic",
+        default_value="dlio/odom_node/odom",
+        description="odometry topic",
+    )
+
     camera_frame_arg = DeclareLaunchArgument(
         "camera_frame",
         default_value="zed_left_camera_optical_frame",
@@ -118,7 +118,6 @@ def generate_launch_description():
             {
                 "weights": LaunchConfiguration("weights"),
                 "confidence": LaunchConfiguration("confidence"),
-                "model_choice": LaunchConfiguration("model_choice"),
                 "config": LaunchConfiguration("config"),
                 "labels": LaunchConfiguration("labels"),
                 "camera_frame": LaunchConfiguration("camera_frame"),
@@ -134,6 +133,7 @@ def generate_launch_description():
             ("image_raw", LaunchConfiguration("input_rgb_topic")),
             ("depth_raw", LaunchConfiguration("input_depth_topic")),
             ("camera_info", LaunchConfiguration("camera_info_topic")),
+            ("odom", LaunchConfiguration("input_odom_topic")),
 
         ],
     )
@@ -152,7 +152,6 @@ def generate_launch_description():
             namespace_arg,
             weights_arg,
             confidence_arg,
-            model_choice_arg,
             flip_img_arg,
             labels_arg,
             scale_depth_arg,
@@ -160,6 +159,7 @@ def generate_launch_description():
             input_rgb_topic_arg,
             input_depth_topic_arg,
             input_camera_info_arg,
+            input_odom_topic_arg,
             camera_frame_arg,
             camera_transform_arg,
             tracker_n_dets_arg,

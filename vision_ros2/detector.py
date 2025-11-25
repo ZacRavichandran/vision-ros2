@@ -23,6 +23,7 @@ from nav_msgs.msg import Odometry
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg, decode_img_msg
 import cv2
+import sys
 
 
 class Detector:
@@ -41,6 +42,7 @@ class DetectionConfig:
     # Topics
     color_sub_topic: str = "image_raw"
     depth_sub_topic: str = "depth_raw"
+    odom_sub_topic: str = "odom"
     depth_info_sub_topic: str = "camera_info"
     detection_topic: str = "detections"
     track_topic: str = "tracks"
@@ -135,6 +137,9 @@ class DetectionComponenet:
         self._annotation_pub = self._parent_node.create_publisher(
             Image, f"~/{self._data_config.detection_viz_image}", qos_profile
         )
+        self._debug_image_pub = self._parent_node.create_publisher(
+            Image, f"~/debug_image", qos_profile
+        )
         self._detection_pub = self._parent_node.create_publisher(
             Detection, f"~/{self._data_config.detection_topic}", qos_profile
         )
@@ -157,7 +162,7 @@ class DetectionComponenet:
             img_sub_profile
         )
         self._odom_sub = self._parent_node.create_subscription(
-            Odometry, "/odom", self._odom_cbk, img_sub_profile
+            Odometry, self._data_config.odom_sub_topic, self._odom_cbk, img_sub_profile
         )
         self._set_labels_service = self._parent_node.create_service(
             SetLabels,
@@ -344,12 +349,12 @@ class DetectionComponenet:
         return pixel_x, pixel_y, pixel_width, pixel_height
 
     def _deproject_detections(
-        self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time, img_height: int, img_width: int
+        self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time, img_height: int, img_width: int, ori_img_copy=None
     ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
         if self._intrinsics is None or self._last_depth is None:
             self._parent_node.get_logger().info(f"Error intrinsics: {self._intrinsics is None}, depth: {self._last_depth is None}")
-            return (0, 0, 0), 0
+            return (0, 0, 0), 0, ori_img_copy
 
         fx = self._intrinsics.k[0]
         fy = self._intrinsics.k[4]
@@ -375,38 +380,40 @@ class DetectionComponenet:
 
         #self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
 
-        # Rotate coordinates by 90 degrees anticlockwise if using spot camera
+        # Rotate box coordinates by 90 degrees anticlockwise if using spot camera
+        # Anticlockwise rotation in this case actually means clockwise rotation in the computer vision image frame with positive y down
         if self._data_config.camera_transform == "spot_camera":
             box_points = np.array([
                 [x_min, y_min],
                 [x_max, y_max],
             ])
-            img_center_point = np.array([[img_width // 2, -img_height // 2], 
-                                         [img_width // 2, -img_height // 2]], dtype=np.int32)
-            rot_mat = np.array([[0, 1], [-1, 0]])
-
-            # print(box_points, flush=True)
-            # print(img_center_point, flush=True)
-
-            print(f"box_points: {box_points}", flush=True)
+            img_center_point_original = np.array([[img_width // 2, img_height // 2], 
+                                         [img_width // 2, img_height // 2]], dtype=np.int32)
+            img_center_point_rotated = np.array([[img_height // 2, img_width // 2],
+                                         [img_height // 2, img_width // 2]], dtype=np.int32) 
+            rot_mat = np.array([[0, 1], [-1, 0]]) # using 90 degree clockwise (for actual anticlockwise) rotation matrix
             
-            box_points -= img_center_point
-
-            print(f"box_points after centering: {box_points}", flush=True)
+            # Centering bbox points to image center for rotation
+            box_points -= img_center_point_original
             box_points_rotated = box_points @ rot_mat.T
-            print(f"box_points_rotated: {box_points_rotated}", flush=True)
-            box_points_rotated += img_center_point
+            box_points_rotated += img_center_point_rotated
 
-            print(f"box_points_rotated: {box_points_rotated}", flush=True)
+            # The min and max coordinates need to be manually extracted after rotation instead of just using previous min and max indices
+            x_min = np.min(box_points_rotated[:, 0])
+            x_max = np.max(box_points_rotated[:, 0])
+            y_min = np.min(box_points_rotated[:, 1])
+            y_max = np.max(box_points_rotated[:, 1])
 
-            x_min, y_min = box_points_rotated[0]
-            x_max, y_max = box_points_rotated[1]
+            x_min = int(np.clip(x_min, 0, img_height - 1))
+            x_max = int(np.clip(x_max, 0, img_height - 1))
+            y_min = int(np.clip(y_min, 0, img_width - 1))
+            y_max = int(np.clip(y_max, 0, img_width - 1))
 
-            x_min = int(np.clip(x_min, 0, img_width - 1))
-            x_max = int(np.clip(x_max, 0, img_width - 1))
-            y_min = int(np.clip(y_min, 0, img_height - 1))
-            y_max = int(np.clip(y_max, 0, img_height - 1))
+            # draw rectangle on ori_img_copy for visualization
+            if ori_img_copy is not None:
+                cv2.rectangle(ori_img_copy, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
 
+            # Calculate the center of the rotated bounding box
             x = int((x_min + x_max) / 2)
             y = int((y_min + y_max) / 2)
 
@@ -418,7 +425,7 @@ class DetectionComponenet:
         valid_pixels = region[np.isfinite(region)]
 
         if len(valid_pixels) == 0:
-            return (0, 0, 0), 0
+            return (0, 0, 0), 0, ori_img_copy
 
 
         if self._data_config.camera_transform == "spot_camera":
@@ -437,22 +444,7 @@ class DetectionComponenet:
 
         if self._last_odom is None:
             self._parent_node.get_logger().error("Latest odometry or transform is not available in deproject detections!!")
-            return (0, 0, 0), 0
-
-        # try:
-        #     transform_msg = self._tf_buffer.lookup_transform(
-        #         self._data_config.target_frame,
-        #         self._data_config.camera_frame,
-        #         Time(),
-        #         timeout=Duration(seconds=1),
-        #     )
-        # except Exception as ex:  # TODO not good
-        #     self._parent_node.get_logger().info(
-        #         f"[detector] ERROR cannot lookup transform between: {self._data_config.target_frame} and {self._data_config.camera_frame}"
-        #     )
-        #     return (0, 0, 0), 0
-
-        # transform = transform_msg.transform
+            return (0, 0, 0), 0, ori_img_copy
 
         if self._data_config.camera_transform == "spot_camera":
             # self._parent_node.get_logger().info("Using spot camera transform for deprojection.")
@@ -486,7 +478,7 @@ class DetectionComponenet:
         y = result_map[1]
         z = result_map[2]
 
-        return (x, y, z), depth_value
+        return (x, y, z), depth_value, ori_img_copy
 
     def set_labels(self):
         pass
@@ -510,9 +502,12 @@ class DetectionComponenet:
 
         if self._data_config.flip_img:
             img = img[::-1, ::-1]
+        
+        ori_img_copy = img.copy()
+        debug_image = None
 
         pred_color, classes, boxes, confidences = self._detector.predict(
-            img, plot_output=self._data_config.debug
+            img, plot_output=self._data_config.debug, camera_name=self._data_config.camera_transform
         )
 
         #self._parent_node.get_logger().info(
@@ -538,7 +533,7 @@ class DetectionComponenet:
 
             # self._parent_node.get_logger().info(f"got box: {box}")
 
-            (x, y, z), depth_point = self._deproject_detections(
+            (x, y, z), depth_point, debug_image = self._deproject_detections(
                 box[0],
                 box[1],
                 w=box[2],
@@ -550,6 +545,7 @@ class DetectionComponenet:
                 time=img_msg.header.stamp,
                 img_height=pred_color.shape[0],
                 img_width=pred_color.shape[1],
+                ori_img_copy=ori_img_copy
             )
 
             # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
@@ -591,4 +587,13 @@ class DetectionComponenet:
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
 
             self._parent_node.get_logger().info(
-                f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}", throttle_duration_sec=4.0)
+                f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}", throttle_duration_sec=8.0)
+            
+        if debug_image is not None and self._data_config.camera_transform == "spot_camera":
+            debug_img_msg = self._bridge.cv2_to_imgmsg(
+                np.array(debug_image), encoding="passthrough"
+            )
+            debug_img_msg.header = img_msg.header
+            debug_img_msg.encoding = "rgb8"
+
+            self._debug_image_pub.publish(debug_img_msg)
