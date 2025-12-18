@@ -79,6 +79,10 @@ class DetectionConfig:
 
     scale_depth: bool = False
 
+    # camera to body rotations for the Spot and Zed cameras
+    spot_camera_rot: List[float] = (0.143, 0.812, -0.229, 0.518)
+    zed_camera_rot: List[float] = (-0.5, 0.5, -0.5, 0.5)
+
 
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
@@ -107,8 +111,13 @@ class DetectionComponenet:
             n_track_thresh=self._data_config.tracker_n_dets,
         )
 
-        self._parent_node.get_logger().info(f"config tracker with thresh: {self._data_config.track_distance_thresh}")
-        self._parent_node.get_logger().info(f"Camera Transform is : {self._data_config.camera_transform}")
+        if self._data_config.camera_transform == "spot_camera":
+            self._camera_to_body_rot = self._data_config.spot_camera_rot
+        else:
+            self._camera_to_body_rot = self._data_config.zed_camera_rot
+
+        self._parent_node.get_logger().info(f"Config tracker with thresh: {self._data_config.track_distance_thresh}")
+        self._parent_node.get_logger().info(f"Camera transform is : {self._data_config.camera_transform}")
         self._parent_node.get_logger().info(f"Scale depth is : {self._data_config.scale_depth}")
         self._parent_node.get_logger().info(f"Labels: {self._labels}")
 
@@ -138,7 +147,7 @@ class DetectionComponenet:
             Image, f"~/{self._data_config.detection_viz_image}", qos_profile
         )
         self._debug_image_pub = self._parent_node.create_publisher(
-            Image, f"~/debug_image", qos_profile
+            Image, f"~/bbox_debug_image", qos_profile
         )
         self._detection_pub = self._parent_node.create_publisher(
             Detection, f"~/{self._data_config.detection_topic}", qos_profile
@@ -336,10 +345,7 @@ class DetectionComponenet:
     def _unnormalize_coords(
         self, norm_x: float, norm_y: float, norm_w: float, norm_h: float, img_height: int, img_width: int
     ) -> Tuple[int, int, int, int]:
-        # Get image dimensions
-        # img_width = self._intrinsics.width  # 640
-        # img_height = self._intrinsics.height  # 360
-
+        
         # Convert normalized to pixel coordinates
         pixel_x = int(norm_x * img_width)
         pixel_y = int(norm_y * img_height)
@@ -347,6 +353,41 @@ class DetectionComponenet:
         pixel_height = int(norm_h * img_height)
 
         return pixel_x, pixel_y, pixel_width, pixel_height
+    
+    def _rotate_bbox_coords(
+        self, x_min: int, y_min: int, x_max: int, y_max: int, img_height: int, img_width: int, rot_type: str = "clockwise"
+    ) -> Tuple[int, int, int, int]:
+        # For Spot, rotate box coordinates by 90 degrees anticlockwise in world frame (actually clockwise in image frame with positive y down)
+        box_points = np.array([
+            [x_min, y_min],
+            [x_max, y_max],
+        ])
+        img_center_point_original = np.array([[img_width // 2, img_height // 2], 
+                                     [img_width // 2, img_height // 2]], dtype=np.int32)
+        img_center_point_rotated = np.array([[img_height // 2, img_width // 2],
+                                     [img_height // 2, img_width // 2]], dtype=np.int32)
+        if rot_type == "clockwise":
+            rot_mat = np.array([[0, 1], [-1, 0]])
+        else:
+            rot_mat = np.array([[0, -1], [1, 0]])
+
+        # Centering bbox points to image center for rotation
+        box_points -= img_center_point_original
+        box_points_rotated = box_points @ rot_mat.T
+        box_points_rotated += img_center_point_rotated
+
+        # The min and max coordinates need to be manually extracted after rotation instead of just using previous min and max indices
+        x_min_rotated = np.min(box_points_rotated[:, 0])
+        x_max_rotated = np.max(box_points_rotated[:, 0])
+        y_min_rotated = np.min(box_points_rotated[:, 1])
+        y_max_rotated = np.max(box_points_rotated[:, 1])
+
+        x_min_rotated = int(np.clip(x_min_rotated, 0, img_height - 1))
+        x_max_rotated = int(np.clip(x_max_rotated, 0, img_height - 1))
+        y_min_rotated = int(np.clip(y_min_rotated, 0, img_width - 1))
+        y_max_rotated = int(np.clip(y_max_rotated, 0, img_width - 1))
+
+        return x_min_rotated, y_min_rotated, x_max_rotated, y_max_rotated
 
     def _deproject_detections(
         self, x: np.ndarray, y: np.ndarray, w: np.ndarray, h: np.ndarray, time, img_height: int, img_width: int, ori_img_copy=None
@@ -370,44 +411,18 @@ class DetectionComponenet:
             depth_img = depth_img.astype(np.float32) / self._data_config.detection_depth_scale
 
         x, y, w, h = self._unnormalize_coords(x, y, w, h, img_height, img_width)
-        
-        # self._parent_node.get_logger().info(f"deproject with wh: {w}, {h}")
 
         x_min = round(max(0, x - w / 2))
         x_max = round(min(img_width - 1, x + w // 2))
         y_min = round(max(0, y - h / 2))
         y_max = round(min(img_height - 1, y + h // 2))
 
-        #self._parent_node.get_logger().info(f"bounds: {x_min}, {x_max}, {y_min}, {y_max}")
-
         # Rotate box coordinates by 90 degrees anticlockwise if using spot camera
         # Anticlockwise rotation in this case actually means clockwise rotation in the computer vision image frame with positive y down
         if self._data_config.camera_transform == "spot_camera":
-            box_points = np.array([
-                [x_min, y_min],
-                [x_max, y_max],
-            ])
-            img_center_point_original = np.array([[img_width // 2, img_height // 2], 
-                                         [img_width // 2, img_height // 2]], dtype=np.int32)
-            img_center_point_rotated = np.array([[img_height // 2, img_width // 2],
-                                         [img_height // 2, img_width // 2]], dtype=np.int32) 
-            rot_mat = np.array([[0, 1], [-1, 0]]) # using 90 degree clockwise (for actual anticlockwise) rotation matrix
-            
-            # Centering bbox points to image center for rotation
-            box_points -= img_center_point_original
-            box_points_rotated = box_points @ rot_mat.T
-            box_points_rotated += img_center_point_rotated
-
-            # The min and max coordinates need to be manually extracted after rotation instead of just using previous min and max indices
-            x_min = np.min(box_points_rotated[:, 0])
-            x_max = np.max(box_points_rotated[:, 0])
-            y_min = np.min(box_points_rotated[:, 1])
-            y_max = np.max(box_points_rotated[:, 1])
-
-            x_min = int(np.clip(x_min, 0, img_height - 1))
-            x_max = int(np.clip(x_max, 0, img_height - 1))
-            y_min = int(np.clip(y_min, 0, img_width - 1))
-            y_max = int(np.clip(y_max, 0, img_width - 1))
+            x_min, y_min, x_max, y_max = self._rotate_bbox_coords(
+                x_min, y_min, x_max, y_max, img_height, img_width, rot_type="clockwise"
+            )
 
             # draw rectangle on ori_img_copy for visualization
             if ori_img_copy is not None:
@@ -446,16 +461,7 @@ class DetectionComponenet:
             self._parent_node.get_logger().error("Latest odometry or transform is not available in deproject detections!!")
             return (0, 0, 0), 0, ori_img_copy
 
-        if self._data_config.camera_transform == "spot_camera":
-            # self._parent_node.get_logger().info("Using spot camera transform for deprojection.")
-            zed_camera_rot = Rotation.from_quat([
-                0.143, 0.812, -0.229, 0.518
-            ])
-        else:
-            # self._parent_node.get_logger().info("Using default camera transform for deprojection.")
-            zed_camera_rot = Rotation.from_quat([
-                -0.5, 0.5, -0.5, 0.5
-            ])
+        camera_to_body_rot = Rotation.from_quat(self._camera_to_body_rot)
 
         rot = Rotation.from_quat(
             [
@@ -471,7 +477,7 @@ class DetectionComponenet:
              self._last_odom.pose.pose.position.z]
         )
 
-        result_map = (rot.as_matrix() @ zed_camera_rot.as_matrix() @ result_camera_coords) + trans
+        result_map = (rot.as_matrix() @ camera_to_body_rot.as_matrix() @ result_camera_coords) + trans
 
 
         x = result_map[0]
