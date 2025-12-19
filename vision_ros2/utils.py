@@ -196,6 +196,8 @@ def create_marker_msg(
     orientation: Quaternion = IDENTITY_QUATERNION,
     scale: float = 0.25,
     marker_type=BASE_MARKER.SPHERE,
+    publish_text: bool = False,
+    class_name: str = ""
 ) -> Marker:
     marker_msg = Marker()
     marker_msg.id = int(id)
@@ -217,4 +219,21 @@ def create_marker_msg(
     marker_msg.action = marker_msg.ADD
     marker_msg.type = marker_type
 
-    return marker_msg
+    if publish_text and class_name:
+        text_marker = Marker()
+        text_marker.id = int(id) + 1
+        text_marker.header = header
+        text_marker.text = class_name
+        text_marker.pose.position = Point(
+            x=float(position[0]), y=float(position[1]), z=float(position[2]) + 1.0
+        )
+        text_marker.pose.orientation = marker_msg.pose.orientation
+        text_marker.color = color
+        text_marker.scale.z = scale
+        text_marker.action = marker_msg.ADD
+        text_marker.type = Marker.TEXT_VIEW_FACING
+        text_marker.lifetime.sec = 0
+
+        return marker_msg, text_marker
+    else:
+        return marker_msg

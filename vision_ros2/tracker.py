@@ -22,6 +22,7 @@ class Hypothesis:
         frame: str,
         label: str = "",
         parent: str = "",
+        is_published: bool = False,
     ) -> None:
         self.n_detections = 0
         self.class_id = class_id
@@ -33,7 +34,7 @@ class Hypothesis:
         self.idx = idx
         self.frame = frame
         self.velocity = np.zeros(3)
-        self.history_weight = 0.95
+        self.history_weight = 0.90
         self.label = label
         self.parent = parent
 
@@ -54,6 +55,7 @@ class Hypothesis:
         self.time = time
         self.score = score
         self.n_detections += 1
+        self.is_published = False
 
     def compute_vel(self, history: int = 25):
         pose_history = np.array(self.poses)[-history:]
@@ -108,7 +110,7 @@ class HypothesisSet:
         min_idx = -1
         for idx, hypothesis in enumerate(self.hypotheses):
             dist = np.linalg.norm(hypothesis.pose - pose)
-            if dist < min_hypothesis_dist:
+            if dist < min_hypothesis_dist and label == hypothesis.label:
                 min_hypothesis_dist = dist
                 min_idx = idx
 

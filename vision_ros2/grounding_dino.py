@@ -56,12 +56,13 @@ class GroundingDinoInfer:
         _ = model.eval()
         return model
 
-    def preprocess_img(self, img: np.ndarray):
+    def preprocess_img(self, img: np.ndarray, camera_name: str):
         image_pil = Image.fromarray(img).convert("RGB")  # load image
+        if camera_name == "spot_camera":
+            image_pil = image_pil.rotate(-90, expand=True)  # rotate by 90 degree clockwise
 
         transform = T.Compose(
             [
-                T.RandomResize([800], max_size=1333),
                 T.ToTensor(),
                 T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
@@ -165,7 +166,7 @@ class GroundingDinoInfer:
         return image_pil, mask
 
     def predict(
-        self, img: np.ndarray, plot_output: Optional[bool] = True
+        self, img: np.ndarray, plot_output: Optional[bool] = True, camera_name: Optional[str] = "zed_camera"
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Run inference on `img` using Grounding Dino.
 
@@ -186,7 +187,7 @@ class GroundingDinoInfer:
         """
         pred_classes = self.classes.copy()
 
-        img_pil, img = self.preprocess_img(img)
+        img_pil, img = self.preprocess_img(img, camera_name=camera_name)
 
         boxes, labels, confidences = self.get_grounding_output(
             self.grounding_dino_model,
@@ -197,7 +198,7 @@ class GroundingDinoInfer:
         )
 
         if len(boxes) == 0:
-            img_pil = img_pil.resize((640, 360))
+            # img_pil = img_pil.resize((640, 360))
             img_pil = np.asarray(img_pil)
 
             return img_pil, "", np.array([]), np.array([])
