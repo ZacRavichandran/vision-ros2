@@ -4,7 +4,9 @@ import rclpy
 from rclpy.node import Node
 
 from vision_ros2.detector import DetectionComponenet
-from vision_ros2.grounding_dino import GroundingDinoInfer
+
+# from vision_ros2.grounding_dino import GroundingDinoInfer
+from vision_ros2.sam3 import SAM3Infer
 
 
 class GroundingDinoNode(Node):
@@ -22,11 +24,17 @@ class GroundingDinoNode(Node):
         print(weights)
         print(config)
 
-        self._gd_infer = GroundingDinoInfer(
-            ckpt_path=weights,
-            confidence=confidence,
+        # self._gd_infer = GroundingDinoInfer(
+        #     ckpt_path=weights,
+        #     confidence=confidence,
+        #     classes=["chair", "desk"],
+        #     config_path=config,
+        # )
+
+        self._gd_infer = SAM3Infer(
             classes=["chair", "desk"],
-            config_path=config,
+            confidence=0.3,
+            ckpt_path="/home/dcist/data/weights/sam3.pt",
         )
 
         self._detection_componenet = DetectionComponenet(self, detector=self._gd_infer)
