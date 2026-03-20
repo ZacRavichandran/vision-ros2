@@ -3,9 +3,8 @@
 # detector_node parameters
 detector_node:
   ros__parameters:
-    weights:               /home/dcist/data/weights/groundingdino_swint_ogc.pth
+    weights:               /home/dcist/data/weights/sam3.pt
     confidence:            0.5
-    config:                /path/to/GroundingDINO_SwinT_OGC.py
     labels:                "desk,chair"
     camera_frame:          prometheus/frontleft
     tracker_n_dets:        5

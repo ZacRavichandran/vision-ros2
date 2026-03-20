@@ -12,10 +12,10 @@ warnings.filterwarnings("ignore")
 class SAM3Infer:
     def __init__(
         self,
-        classes: List[str],
         confidence: float,
         ckpt_path: str,
         device: Optional[str] = "cuda",
+        classes: Optional[List[str]] = "",
     ):
         """SAM3 (Segment Anything Model 3) Inference.
 

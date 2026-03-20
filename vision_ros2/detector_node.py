@@ -32,9 +32,8 @@ class GroundingDinoNode(Node):
         # )
 
         self._gd_infer = SAM3Infer(
-            classes=["chair", "desk"],
             confidence=0.3,
-            ckpt_path="/home/dcist/data/weights/sam3.pt",
+            ckpt_path=weights,
         )
 
         self._detection_componenet = DetectionComponenet(self, detector=self._gd_infer)

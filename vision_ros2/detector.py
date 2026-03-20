@@ -51,12 +51,13 @@ class DetectionConfig:
     debug: bool = True
     target_frame: str = "map"
 
+    labels: str = ""
+
     camera_frame: str = "camera_optical_frame"
 
     camera_transform: str = "spot_camera"
 
     # Detection params
-    labels: str = ""
     detector_confidence: float = 0.5
     detection_depth_threshold: float = 15
     detection_depth_scale: float = 1000.0
@@ -86,7 +87,7 @@ class DetectionConfig:
 
 
 class DetectionComponenet:
-    def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
+    def __init__(self, parent_node: Node, detector: Detector):
         self._detector = detector
         self._img_queue = queue.Queue(maxsize=2)
         self._bridge = cv_bridge.CvBridge()
