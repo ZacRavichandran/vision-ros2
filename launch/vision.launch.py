@@ -19,10 +19,10 @@ def launch_setup(context, *args, **kwargs):
 
     topics = cfg.get("topics", {})
 
-    grounding_dino_node = Node(
+    detector_node = Node(
         package="vision_ros2",
-        executable="grounding_dino_node",
-        name="grounding_dino_node",
+        executable="detector_node",
+        name="detector_node",
         namespace=cfg.get("namespace", ""),
         output="screen",
         parameters=[config_file],
@@ -49,7 +49,7 @@ def launch_setup(context, *args, **kwargs):
         ],
     )
 
-    return [grounding_dino_node, vlm_node]
+    return [detector_node, vlm_node]
 
 
 def generate_launch_description():

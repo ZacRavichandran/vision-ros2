@@ -24,7 +24,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "grounding_dino_node = vision_ros2.grounding_dino_node:main",
+            "detector_node = vision_ros2.detector_node:main",
             "vlm_node = vision_ros2.vlm_node:main",
         ],
     },

@@ -84,10 +84,10 @@ def generate_launch_description():
 
     flip_img = LaunchConfiguration("flip_img")
 
-    grounding_dino_node = Node(
+    detector_node = Node(
         package="vision_ros2",
-        executable="grounding_dino_node",
-        name="grounding_dino_node",
+        executable="detector_node",
+        name="detector_node",
         output="screen",
         parameters=[
             {
@@ -133,7 +133,7 @@ def generate_launch_description():
             camera_frame_arg,
             tracker_n_dets_arg,
             track_distance_thresh_arg,
-            grounding_dino_node,
+            detector_node,
             vlm_node,
         ]
     )

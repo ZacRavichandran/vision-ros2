@@ -11,7 +11,7 @@ from vision_ros2.sam3 import SAM3Infer
 
 class GroundingDinoNode(Node):
     def __init__(self):
-        super().__init__("grounding_dino_node")
+        super().__init__("detector_node")
 
         self.declare_parameter("weights", "")
         self.declare_parameter("confidence", 0.3)

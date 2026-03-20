@@ -30,7 +30,7 @@ def generate_launch_description():
 
     confidence_arg = DeclareLaunchArgument(
         "confidence",
-        default_value="0.4", # 0.4 for Zed 0.5 for Spot
+        default_value="0.4",  # 0.4 for Zed 0.5 for Spot
         description="Confidence threshold for detection (default: 0.4)",
     )
 
@@ -42,20 +42,16 @@ def generate_launch_description():
 
     tracker_n_dets_arg = DeclareLaunchArgument(
         "tracker_n_dets",
-        default_value="5", # 8 also works for small; 5 for larger model
+        default_value="5",  # 8 also works for small; 5 for larger model
         description="number of detections for a track",
     )
 
     track_distance_thresh_arg = DeclareLaunchArgument(
-        "track_distance_thresh",
-        default_value="6.0",
-        description="clustering distance"
+        "track_distance_thresh", default_value="6.0", description="clustering distance"
     )
 
     labels_arg = DeclareLaunchArgument(
-        "labels",
-        default_value="People, Vehicles",
-        description="clustering distance"
+        "labels", default_value="People, Vehicles", description="clustering distance"
     )
 
     config_arg = DeclareLaunchArgument(
@@ -109,10 +105,10 @@ def generate_launch_description():
     vision_static_ld = IncludeLaunchDescription(static_transforms_launch)
 
     # Node configuration
-    grounding_dino_node = Node(
+    detector_node = Node(
         package="vision_ros2",
-        executable="grounding_dino_node",
-        name="grounding_dino_node",
+        executable="detector_node",
+        name="detector_node",
         output="screen",
         parameters=[
             {
@@ -134,7 +130,6 @@ def generate_launch_description():
             ("depth_raw", LaunchConfiguration("input_depth_topic")),
             ("camera_info", LaunchConfiguration("camera_info_topic")),
             ("odom", LaunchConfiguration("input_odom_topic")),
-
         ],
     )
 
@@ -165,7 +160,7 @@ def generate_launch_description():
             tracker_n_dets_arg,
             track_distance_thresh_arg,
             vision_static_ld,
-            grounding_dino_node,
+            detector_node,
             vlm_node,
         ]
     )

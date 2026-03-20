@@ -1,7 +1,7 @@
 
 
-# grounding_dino_node parameters
-grounding_dino_node:
+# detector_node parameters
+detector_node:
   ros__parameters:
     weights:               /home/dcist/data/weights/groundingdino_swint_ogc.pth
     confidence:            0.5
