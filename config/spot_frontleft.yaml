@@ -1,0 +1,27 @@
+
+
+# grounding_dino_node parameters
+grounding_dino_node:
+  ros__parameters:
+    weights:               /home/dcist/data/weights/groundingdino_swint_ogc.pth
+    confidence:            0.5
+    config:                /path/to/GroundingDINO_SwinT_OGC.py
+    labels:                "desk,chair"
+    camera_frame:          prometheus/frontleft
+    tracker_n_dets:        5
+    track_distance_thresh: 5.0
+    scale_depth:           true
+    detection_depth_scale: 1000.0  # realsense depth is in mm
+    flip_img:              false
+    color_sub_topic:    /prometheus/frontleft/color/image_raw
+    depth_sub_topic:  /prometheus/frontleft/depth/image_rect
+    depth_info_sub_topic:  /prometheus/frontleft/color/camera_info
+    odom_sub_topic:         spot/odom
+    camera_to_body_rotation:  [-0.47292251, 0.67509865, -0.52806146, 0.20429687]
+
+
+
+# vlm_node parameters
+vlm_node:
+  ros__parameters:
+    flip_img: false

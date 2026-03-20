@@ -82,6 +82,8 @@ class DetectionConfig:
 
     zed_camera_rot: List[float] = (-0.5, 0.5, -0.5, 0.5)
 
+    camera_to_body_rotation: List[float] = (0.0, 0.0, 0.0, 1.0)
+
 
 class DetectionComponenet:
     def __init__(self, parent_node: Node, detector: Detector, labels: List[str] = ""):
@@ -110,10 +112,12 @@ class DetectionComponenet:
             n_track_thresh=self._data_config.tracker_n_dets,
         )
 
-        if self._data_config.camera_transform == "spot_camera":
-            self._camera_to_body_rot = self._data_config.spot_camera_rot
-        else:
-            self._camera_to_body_rot = self._data_config.zed_camera_rot
+        # if self._data_config.camera_transform == "spot_camera":
+        #     self._camera_to_body_rot = self._data_config.spot_camera_rot
+        # else:
+        #     self._camera_to_body_rot = self._data_config.zed_camera_rot
+
+        self._camera_to_body_rot = self._data_config.camera_to_body_rotation
 
         self._parent_node.get_logger().info(
             f"Config tracker with thresh: {self._data_config.track_distance_thresh}"
@@ -264,7 +268,7 @@ class DetectionComponenet:
             param_value = self._parent_node.get_parameter(field_name)
 
             self._parent_node.get_logger().info(
-                f"getting param: {field_name}: {param_value}"
+                f"getting param: {field_name}: {param_value.value}"
             )
             setattr(config, field_name, param_value.value)
 
@@ -444,10 +448,14 @@ class DetectionComponenet:
         cx = self._intrinsics.k[2]
         cy = self._intrinsics.k[5]
 
-        if self._data_config.camera_transform == "spot_camera":
-            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "16UC1")
-        else:
-            depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, "32FC1")
+        encoding = self._last_depth.encoding
+
+        # TODO remove after testing
+        # if self._data_config.camera_transform == "spot_camera":
+        #     depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, encoding)
+        # else:
+
+        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, encoding)
 
         if self._data_config.scale_depth:
             depth_img = (
