@@ -16,9 +16,13 @@ class VLMInferNode(Node):
         super().__init__("vlm_node")
 
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
-        self.declare_parameter("flip_img", False) 
+        self.declare_parameter("flip_img", False)
+        self.declare_parameter("color_sub_topic", "image_raw")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
         self._flip_img = self.get_parameter("flip_img").get_parameter_value().bool_value
+        img_sub = (
+            self.get_parameter("color_sub_topic").get_parameter_value().string_value
+        )
 
         self._vlm = VLMWrapper(model)
 
@@ -26,7 +30,7 @@ class VLMInferNode(Node):
 
         sub_cbk = ReentrantCallbackGroup()
         self._img_sub = self.create_subscription(
-            Image, "~/image_raw", self._img_cbk, 1, callback_group=sub_cbk
+            Image, img_sub, self._img_cbk, 1, callback_group=sub_cbk
         )
 
         self._query_scene = self.create_service(

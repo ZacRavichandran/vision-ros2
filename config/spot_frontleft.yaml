@@ -25,3 +25,4 @@ detector_node:
 vlm_node:
   ros__parameters:
     flip_img: false
+    color_sub_topic:    /prometheus/frontleft/color/image_raw
