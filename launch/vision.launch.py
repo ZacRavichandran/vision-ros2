@@ -24,12 +24,6 @@ def launch_setup(context, *args, **kwargs):
         namespace=cfg.get("namespace", ""),
         output="screen",
         parameters=[config_file],
-        # remappings=[
-        #     ("image_raw",   topics.get("input_rgb",    "/prometheus/frontleft/color/image_raw")),
-        #     ("depth_raw",   topics.get("input_depth",  "/prometheus/frontleft/depth/image_rect")),
-        #     ("camera_info", topics.get("camera_info",  "/prometheus/frontleft/color/camera_info")),
-        #     ("odom",        topics.get("odom",         "spot/odom")),
-        # ],
     )
 
     vlm_node = Node(
