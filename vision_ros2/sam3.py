@@ -58,6 +58,8 @@ class SAM3Infer:
             device=self.device,
             half=(self.device == "cuda"),  # FP16 on GPU for speed
             verbose=False,
+            save=False, # To prevent results from being saved to disk
+            imgsz=644, # SAM3 needs input images to be divisible by its stride which is 14, so 640 image is padded to 644. Explicitly setting imgsz to 644 suppresses a warning about this padding.
         )
         predictor = SAM3SemanticPredictor(overrides=overrides)
         print(f"[SAM3Infer] Loaded SAM3 from '{ckpt_path}' on device '{self.device}'")
@@ -286,7 +288,7 @@ class SAM3Infer:
         boxes, labels, masks, confidences = self.get_sam3_output(img_np, pred_classes)
 
         if len(boxes) == 0:
-            return np.asarray(img_pil), "", np.array([]), np.array([]), np.array([])
+            return np.asarray(img_pil), np.array([]), np.array([]), np.array([])
 
         if plot_output:
             tgt = {

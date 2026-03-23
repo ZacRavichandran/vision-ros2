@@ -608,7 +608,7 @@ class DetectionComponenet:
                 ori_img_copy=ori_img_copy,
             )
 
-            self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
+            # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
 
             # dont publish if 0
             if depth_point == 0:
