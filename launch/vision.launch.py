@@ -17,8 +17,6 @@ def launch_setup(context, *args, **kwargs):
     with open(config_file, "r") as f:
         cfg = yaml.safe_load(f)
 
-    topics = cfg.get("topics", {})
-
     detector_node = Node(
         package="vision_ros2",
         executable="detector_node",
@@ -38,15 +36,9 @@ def launch_setup(context, *args, **kwargs):
         package="vision_ros2",
         executable="vlm_node",
         name="vlm_node",
-        namespace=cfg.get("namespace", "perception"),
+        namespace=cfg.get("namespace", ""),
         output="screen",
         parameters=[config_file],
-        remappings=[
-            (
-                "~/image_raw",
-                topics.get("input_rgb", "/prometheus/frontleft/color/image_raw"),
-            ),
-        ],
     )
 
     return [detector_node, vlm_node]
