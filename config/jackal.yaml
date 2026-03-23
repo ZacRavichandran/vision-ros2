@@ -17,6 +17,8 @@ detector_node:
     depth_info_sub_topic:  /zed/zed_node/depth/camera_info
     odom_sub_topic:         /dlio/odom_node/odom
     camera_to_body_rotation:  [-0.5, 0.5, -0.5, 0.5]  # [x, y, z, w] quaternion
+    save_sam3_results: false
+    print_sam3_stats: false
 
 
 

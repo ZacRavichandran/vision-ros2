@@ -40,13 +40,33 @@ class SAM3Infer:
         self.classes = classes
         self.confidence = confidence
         self.device = device
-        self.predictor = self.load_model(ckpt_path)
+        self.ckpt_path = ckpt_path
+        self.predictor = None  # Defer loading until we can set imgsz
 
     # ------------------------------------------------------------------
     # Model loading
     # ------------------------------------------------------------------
 
-    def load_model(self, ckpt_path: str):
+    def calculate_stride_aligned_imgsz(self, img_height: int, stride: int = 14) -> int:
+        """Calculate the smallest image height that is divisible by stride."""
+        try:
+            stride_aligned_imgsz = ((img_height + stride - 1) // stride) * stride
+            return stride_aligned_imgsz
+        except Exception as e:
+            print(f"[SAM3Infer] Error calculating stride-aligned image size: {e}.")
+
+    def load_model_with_params(self, img_height: int = 621, stride: int = 14, save_sam3_results: bool = False, print_stats: bool = False) -> int:
+        """Load SAM3 model with proper runtime parameters"""
+
+        try:
+            stride_aligned_imgsz = self.calculate_stride_aligned_imgsz(img_height, stride)
+            self.predictor = self.load_model(self.ckpt_path, stride_aligned_imgsz, save_sam3_results, print_stats)
+            return True, stride_aligned_imgsz
+        except Exception as e:
+            print(f"[SAM3Infer] Error loading SAM3 model: {e}.")
+            return False, None
+
+    def load_model(self, ckpt_path: str, stride_aligned_imgsz: int, save_sam3_results: bool, print_stats: bool) -> Any:
         """Load and return a SAM3SemanticPredictor instance."""
         from ultralytics.models.sam import SAM3SemanticPredictor
 
@@ -57,9 +77,9 @@ class SAM3Infer:
             model=ckpt_path,
             device=self.device,
             half=(self.device == "cuda"),  # FP16 on GPU for speed
-            verbose=False,
-            save=False, # To prevent results from being saved to disk
-            imgsz=644, # SAM3 needs input images to be divisible by its stride which is 14, so 640 image is padded to 644. Explicitly setting imgsz to 644 suppresses a warning about this padding.
+            verbose=print_stats, # Print model inference stats if True
+            save=save_sam3_results, # To prevent results from being saved to disk
+            imgsz=stride_aligned_imgsz, # SAM3 needs input images to be divisible by its stride which is 14, so 640 image is padded to 644. Explicitly setting imgsz to 644 suppresses a warning about this padding.
         )
         predictor = SAM3SemanticPredictor(overrides=overrides)
         print(f"[SAM3Infer] Loaded SAM3 from '{ckpt_path}' on device '{self.device}'")
