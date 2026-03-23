@@ -250,11 +250,14 @@ class DetectionComponenet:
 
         # SAM3 model loading once valid camera info is received to get correct imgsz based on input image size
         if not self.detection_model_loaded:
-            self.detection_model_loaded, stride_aligned_imgsz = self._detector.load_model_with_params(
-                img_height=camera_info.height,
-                stride=14,
-                save_sam3_results=self._data_config.save_sam3_results,
-                print_stats=self._data_config.print_sam3_stats)
+            self.detection_model_loaded, stride_aligned_imgsz = (
+                self._detector.load_model_with_params(
+                    img_height=camera_info.height,
+                    stride=14,
+                    save_sam3_results=self._data_config.save_sam3_results,
+                    print_stats=self._data_config.print_sam3_stats,
+                )
+            )
             self._parent_node.get_logger().info(
                 f"SAM3 model loaded: {self.detection_model_loaded} with stride-aligned imgsz: {stride_aligned_imgsz}"
             )
@@ -574,7 +577,7 @@ class DetectionComponenet:
 
         if not self.detection_model_loaded:
             self._parent_node.get_logger().info(
-                f"SAM3 model not loaded yet, skipping detection."
+                "SAM3 model not loaded yet, skipping detection."
             )
             return
 
@@ -670,10 +673,10 @@ class DetectionComponenet:
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
 
-            self._parent_node.get_logger().info(
-                f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}",
-                throttle_duration_sec=8.0,
-            )
+            # self._parent_node.get_logger().info(
+            #     f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}",
+            #     throttle_duration_sec=8.0,
+            # )
 
         if (
             debug_image is not None
