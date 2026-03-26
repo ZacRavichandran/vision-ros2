@@ -25,3 +25,4 @@ vlm_node:
   ros__parameters:
     flip_img: false
     color_sub_topic:    /prometheus/frontright/rotated/color/image_raw
+    hand_sub_topic:  /prometheus/hand/color/image_raw
