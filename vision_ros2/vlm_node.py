@@ -20,6 +20,7 @@ class VLMInferNode(Node):
         self.declare_parameter("vlm_model", "llava-hf/vip-llava-7b-hf")
         self.declare_parameter("flip_img", False)
         self.declare_parameter("color_sub_topic", "image_raw")
+        self.declare_parameter("hand_sub_topic", "hand_img_raw")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
         self._flip_img = self.get_parameter("flip_img").get_parameter_value().bool_value
         img_sub = (
