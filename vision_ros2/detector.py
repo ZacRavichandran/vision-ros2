@@ -49,8 +49,8 @@ class DetectionConfig:
     # Behavior
     drop_old_msg: bool = True
     debug: bool = True
-    save_sam3_results: bool = False
-    print_sam3_stats: bool = False
+    # save_sam3_results: bool = False
+    # print_sam3_stats: bool = False
     target_frame: str = "map"
 
     labels: str = ""
@@ -107,7 +107,7 @@ class DetectionComponenet:
         self._label_set = {}
 
         self.setting_labels = False
-        self.detection_model_loaded = False
+        # self.detection_model_loaded = False
         self._marker_count = 0
         self._total_track_count = 0
 
@@ -249,18 +249,15 @@ class DetectionComponenet:
         self._intrinsics = camera_info
 
         # SAM3 model loading once valid camera info is received to get correct imgsz based on input image size
-        if not self.detection_model_loaded:
-            self.detection_model_loaded, stride_aligned_imgsz = (
-                self._detector.load_model_with_params(
-                    img_height=camera_info.height,
-                    stride=14,
-                    save_sam3_results=self._data_config.save_sam3_results,
-                    print_stats=self._data_config.print_sam3_stats,
-                )
-            )
-            self._parent_node.get_logger().info(
-                f"SAM3 model loaded: {self.detection_model_loaded} with stride-aligned imgsz: {stride_aligned_imgsz}"
-            )
+        # if not self.detection_model_loaded:
+        #     self.detection_model_loaded, stride_aligned_imgsz = self._detector.load_model_with_params(
+        #         img_height=camera_info.height,
+        #         stride=14,
+        #         save_sam3_results=self._data_config.save_sam3_results,
+        #         print_stats=self._data_config.print_sam3_stats)
+        #     self._parent_node.get_logger().info(
+        #         f"SAM3 model loaded: {self.detection_model_loaded} with stride-aligned imgsz: {stride_aligned_imgsz}"
+        #     )
 
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
@@ -575,11 +572,11 @@ class DetectionComponenet:
         if self.setting_labels:
             return
 
-        if not self.detection_model_loaded:
-            self._parent_node.get_logger().info(
-                "SAM3 model not loaded yet, skipping detection."
-            )
-            return
+        # if not self.detection_model_loaded:
+        #     self._parent_node.get_logger().info(
+        #         f"SAM3 model not loaded yet, skipping detection."
+        #     )
+        #     return
 
         img = decode_img_msg(img_msg)
 
