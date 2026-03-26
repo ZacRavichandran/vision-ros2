@@ -24,18 +24,35 @@ class VLMInferNode(Node):
             self.get_parameter("color_sub_topic").get_parameter_value().string_value
         )
 
+        # anything with `hand` is intended for spot hand camera use.
+        # This logic is reduntant and temporary
+        hand_camera_sub = (
+            self.get_parameter("hand_sub_topic").get_parameter_value().string_value
+        )
+
         self._vlm = VLMWrapper(model)
 
         self._latest_img = None
+        self._latest_hand_img = None
 
         sub_cbk = ReentrantCallbackGroup()
         self._img_sub = self.create_subscription(
             Image, img_sub, self._img_cbk, 1, callback_group=sub_cbk
         )
 
-        self._query_scene = self.create_service(
-            Query, "~/query_scene", self._query_scene
+        self._query_scene_main = self.create_service(
+            Query, "~/query_scene", self._query_scene_main
         )
+
+        self._hand_img_sub = self.create_subscription(
+            Image, hand_camera_sub, self._hand_img_cbk, 1, callback_group=sub_cbk
+        )
+        self._query_scene_main = self.create_service(
+            Query, "~/query_scene" + hand_camera_sub, self._query_scene_hand
+        )
+
+    def _hand_img_cbk(self, img: Image) -> None:
+        self._latest_hand_img = decode_img_msg(img)
 
     def _img_cbk(self, img: Image) -> None:
         self._latest_img = decode_img_msg(img)
@@ -44,9 +61,12 @@ class VLMInferNode(Node):
             self._latest_img = self._latest_img[::-1]
 
     def _query_scene(
-        self, query_request: Query.Request, query_response: Query.Response
+        self,
+        query_request: Query.Request,
+        query_response: Query.Response,
+        img_msg: Image,
     ) -> Query.Response:
-        if self._latest_img is None:
+        if img_msg is None:
             query_response.success = False
             query_response.answer = "VLM could not recieve image. Response is unknown"
             return query_response
@@ -54,7 +74,7 @@ class VLMInferNode(Node):
         query = f"{query_request.query}. And why? Provide a brief explaination with details in 25 words or less."
         self.get_logger().info(f"sending query: {query}")
 
-        msg = self._vlm.open_query(prompt=query, image=self._latest_img)
+        msg = self._vlm.open_query(prompt=query, image=img_msg)
 
         parsed = msg.split(query)[-1].strip()
         self.get_logger().info(f"vlm response: {[parsed]}")
@@ -62,6 +82,16 @@ class VLMInferNode(Node):
         query_response.success = True
         query_response.answer = parsed
         return query_response
+
+    def _query_scene_main(
+        self, query_request: Query.Request, query_response: Query.Response
+    ) -> Query.Response:
+        return self._query_scene(query_request, query_response, self._latest_img)
+
+    def _query_scene_hand(
+        self, query_request: Query.Request, query_response: Query.Response
+    ) -> Query.Response:
+        return self._query_scene(query_request, query_response, self._latest_hand_img)
 
 
 def main(args=None):
