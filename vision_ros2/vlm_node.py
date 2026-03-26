@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from typing import Optional
+
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -65,13 +67,17 @@ class VLMInferNode(Node):
         query_request: Query.Request,
         query_response: Query.Response,
         img_msg: Image,
+        postpend: Optional[bool] = True,
     ) -> Query.Response:
         if img_msg is None:
             query_response.success = False
             query_response.answer = "VLM could not recieve image. Response is unknown"
             return query_response
 
-        query = f"{query_request.query}. And why? Provide a brief explaination with details in 25 words or less."
+        query = query_request.query
+        if postpend:
+            query += ". And why? Provide a brief explaination with details in 25 words or less."
+
         self.get_logger().info(f"sending query: {query}")
 
         msg = self._vlm.open_query(prompt=query, image=img_msg)
@@ -91,7 +97,9 @@ class VLMInferNode(Node):
     def _query_scene_hand(
         self, query_request: Query.Request, query_response: Query.Response
     ) -> Query.Response:
-        return self._query_scene(query_request, query_response, self._latest_hand_img)
+        return self._query_scene(
+            query_request, query_response, self._latest_hand_img, postpend=False
+        )
 
 
 def main(args=None):
