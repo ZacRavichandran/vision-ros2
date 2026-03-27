@@ -20,7 +20,7 @@ class SAM3Infer:
         confidence: float,
         ckpt_path: str,
         device: Optional[str] = "cuda",
-        classes: Optional[List[str]] = "",
+        classes: Optional[List[str]] = [],
         save_sam3_results: Optional[bool] = False,
         print_stats: Optional[bool] = False,
     ):
