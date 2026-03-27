@@ -5,7 +5,7 @@ detector_node:
   ros__parameters:
     weights:               /home/dcist/data/weights/sam3.pt
     confidence:            0.5
-    labels:                "desk,chair"
+    labels:                ""
     tracker_n_dets:        5
     track_distance_thresh: 5.0
     scale_depth:           true
