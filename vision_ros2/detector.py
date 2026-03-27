@@ -131,6 +131,8 @@ class DetectionComponenet:
         self._labels = self._parse_labels()
         self._label_set = {}
 
+        self._last_odom = None
+
         self.setting_labels = False  # mutex
         self._marker_count = 0
         self._total_track_count = 0
@@ -588,17 +590,17 @@ class DetectionComponenet:
 
         rot = Rotation.from_quat(
             [
-                self._last_odom.pose.pose.orientation.x,
-                self._last_odom.pose.pose.orientation.y,
-                self._last_odom.pose.pose.orientation.z,
-                self._last_odom.pose.pose.orientation.w,
+                snapshot.odom_msg.pose.pose.orientation.x,
+                snapshot.odom_msg.pose.pose.orientation.y,
+                snapshot.odom_msg.pose.pose.orientation.z,
+                snapshot.odom_msg.pose.pose.orientation.w,
             ]
         )
         trans = np.array(
             [
-                self._last_odom.pose.pose.position.x,
-                self._last_odom.pose.pose.position.y,
-                self._last_odom.pose.pose.position.z,
+                snapshot.odom_msg.pose.pose.position.x,
+                snapshot.odom_msg.pose.pose.position.y,
+                snapshot.odom_msg.pose.pose.position.z,
             ]
         )
 
