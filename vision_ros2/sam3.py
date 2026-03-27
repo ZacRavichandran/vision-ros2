@@ -96,9 +96,7 @@ class SAM3Infer:
     # Pre-processing
     # ------------------------------------------------------------------
 
-    def preprocess_img(
-        self, img: np.ndarray, camera_name: str
-    ) -> Tuple[Image.Image, np.ndarray]:
+    def preprocess_img(self, img: np.ndarray) -> Tuple[Image.Image, np.ndarray]:
         """Convert a raw numpy image to a PIL image, applying camera-specific
         transforms (mirrors GroundingDinoInfer.preprocess_img).
 
@@ -315,7 +313,7 @@ class SAM3Infer:
                              (empty array if nothing detected)
         """
         pred_classes = self.classes.copy()
-        img_pil, img_np = self.preprocess_img(img, camera_name=camera_name)
+        img_pil, img_np = self.preprocess_img(img)
 
         boxes, labels, masks, confidences = self.get_sam3_output(img_np, pred_classes)
 

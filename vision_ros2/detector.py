@@ -7,6 +7,7 @@ import numpy as np
 import tf2_ros
 from geometry_msgs.msg import Point, Quaternion
 from nav_msgs.msg import Odometry
+from rcl_interfaces.msg import ParameterType
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from scipy.spatial.transform import Rotation
@@ -19,6 +20,38 @@ from visualization_msgs.msg import Marker
 
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
 from vision_ros2.utils import create_marker_msg, decode_img_msg
+
+
+@dataclass
+class ImageSnapshot:
+    img_msg: Image
+    depth_msg: Image
+    odom_msg: Odometry
+    intrinsics: CameraInfo
+
+
+@dataclass
+class CameraChannelConfig:
+    name: str
+    color_sub_topic: str
+    depth_sub_topic: str
+    depth_info_sub_topic: str
+    camera_frame: str
+    camera_to_body_rotation: List[float]
+
+
+class CameraChannel:
+    def __init__(self, config: CameraChannelConfig):
+        self.name = config.name
+        self.config = config
+        self.camera_to_body_rotation = config.camera_to_body_rotation
+
+        self._img_queue = queue.Queue(maxsize=1)
+        self._last_depth = None
+        self._intrinsics = None
+
+    def __repr__(self):
+        return f"CameraChannel({self.name}, color={self.config.color_sub_topic})"
 
 
 class Detector:
@@ -35,10 +68,7 @@ class Detector:
 @dataclass
 class DetectionConfig:
     # Topics
-    color_sub_topic: str = "image_raw"
-    depth_sub_topic: str = "depth_raw"
     odom_sub_topic: str = "odom"
-    depth_info_sub_topic: str = "camera_info"
     detection_topic: str = "detections"
     track_topic: str = "tracks"
 
@@ -49,15 +79,9 @@ class DetectionConfig:
     # Behavior
     drop_old_msg: bool = True
     debug: bool = True
-    # save_sam3_results: bool = False
-    # print_sam3_stats: bool = False
     target_frame: str = "map"
 
     labels: str = ""
-
-    camera_frame: str = "camera_optical_frame"
-
-    camera_transform: str = "spot_camera"
 
     # Detection params
     detector_confidence: float = 0.5
@@ -71,8 +95,6 @@ class DetectionConfig:
     tracker_n_dets: int = 10
 
     detect_period: float = 0.05
-
-    flip_img: bool = False
 
     scale_depth: bool = True
 
@@ -89,16 +111,19 @@ class DetectionConfig:
 
 
 class DetectionComponenet:
-    def __init__(self, parent_node: Node, detector: Detector):
+    def __init__(
+        self,
+        parent_node: Node,
+        detector: Detector,
+        camera_channels: List[CameraChannel],
+    ):
         self._detector = detector
+        self._channels = camera_channels
         self._img_queue = queue.Queue(maxsize=2)
         self._bridge = cv_bridge.CvBridge()
         self._parent_node = parent_node
         self._data_config = self._load_config()
 
-        self._intrinsics = None
-        self._last_depth = None
-        self._last_odom = None
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(
             self._tf_buffer, self._parent_node
@@ -106,8 +131,7 @@ class DetectionComponenet:
         self._labels = self._parse_labels()
         self._label_set = {}
 
-        self.setting_labels = False
-        # self.detection_model_loaded = False
+        self.setting_labels = False  # mutex
         self._marker_count = 0
         self._total_track_count = 0
 
@@ -125,9 +149,6 @@ class DetectionComponenet:
 
         self._parent_node.get_logger().info(
             f"Config tracker with thresh: {self._data_config.track_distance_thresh}"
-        )
-        self._parent_node.get_logger().info(
-            f"Camera transform is : {self._data_config.camera_transform}"
         )
         self._parent_node.get_logger().info(
             f"Scale depth is : {self._data_config.scale_depth}"
@@ -153,15 +174,12 @@ class DetectionComponenet:
             String, "~/info", qos_profile
         )
 
-        self._detection_viz_pub = self._parent_node.create_publisher(
+        self._detection_marker_pub = self._parent_node.create_publisher(
             Marker, f"~/{self._data_config.detection_viz_3d}", qos_profile
         )
-        self._annotation_pub = self._parent_node.create_publisher(
-            Image, f"~/{self._data_config.detection_viz_image}", qos_profile
-        )
-        self._debug_image_pub = self._parent_node.create_publisher(
-            Image, "~/bbox_debug_image", qos_profile
-        )
+        # self._detection_image_pub = self._parent_node.create_publisher(
+        #     Image, f"~/{self._data_config.detection_viz_image}", qos_profile
+        # )
         self._detection_pub = self._parent_node.create_publisher(
             Detection, f"~/{self._data_config.detection_topic}", qos_profile
         )
@@ -171,18 +189,44 @@ class DetectionComponenet:
         self._track_viz_pub = self._parent_node.create_publisher(
             Marker, f"~/{self._data_config.track_viz_topic}", qos_profile
         )
-        self._rgb_sub = self._parent_node.create_subscription(
-            Image, self._data_config.color_sub_topic, self._img_cbk, img_sub_profile
-        )
-        self._depth_sub = self._parent_node.create_subscription(
-            Image, self._data_config.depth_sub_topic, self._depth_cbk, img_sub_profile
-        )
-        self._depth_info_sub = self._parent_node.create_subscription(
-            CameraInfo,
-            self._data_config.depth_info_sub_topic,
-            self._depth_info_cbk,
-            img_sub_profile,
-        )
+
+        self._detection_img_pubs = {}
+        for channel in self._channels:
+            self._parent_node.create_subscription(
+                Image,
+                channel.config.color_sub_topic,
+                lambda msg, ch=channel: self._img_cbk(msg, ch),
+                img_sub_profile,
+            )
+            self._parent_node.create_subscription(
+                Image,
+                channel.config.depth_sub_topic,
+                lambda msg, ch=channel: self._depth_cbk(msg, ch),
+                img_sub_profile,
+            )
+            self._parent_node.create_subscription(
+                CameraInfo,
+                channel.config.depth_info_sub_topic,
+                lambda msg, ch=channel: self._depth_info_cbk(msg, ch),
+                img_sub_profile,
+            )
+            self._detection_img_pubs[channel.name] = self._parent_node.create_publisher(
+                Image, f"~/detection_img/{channel.name}", qos_profile
+            )
+
+        # self._rgb_sub = self._parent_node.create_subscription(
+        #     Image, self._data_config.color_sub_topic, self._img_cbk, img_sub_profile
+        # )
+        # self._depth_sub = self._parent_node.create_subscription(
+        #     Image, self._data_config.depth_sub_topic, self._depth_cbk, img_sub_profile
+        # )
+        # self._depth_info_sub = self._parent_node.create_subscription(
+        #     CameraInfo,
+        #     self._data_config.depth_info_sub_topic,
+        #     self._depth_info_cbk,
+        #     img_sub_profile,
+        # )
+
         self._odom_sub = self._parent_node.create_subscription(
             Odometry, self._data_config.odom_sub_topic, self._odom_cbk, img_sub_profile
         )
@@ -217,47 +261,68 @@ class DetectionComponenet:
         We want to drop old messages in favor of incoming ones, hence the
         queue logic.
         """
-        if not self._img_queue.empty():
-            if self._img_queue.qsize():
-                img = self._img_queue.get(block=True)
-                self.detect(img)
-
+        for channel in self._channels:
+            if not channel._img_queue.empty():
+                img_snapshot = channel._img_queue.get(block=True)
+                self.detect(img_snapshot, channel)
         tracks = self._tracker.get_tracks()
         self._pub_tracks(tracks)
 
-    def _img_cbk(self, img_msg: Image) -> None:
-        """If `self.drop_old_msg` is true, empty the queue before
-        placing image so that we segment the most recent one / don't lag.
+    # def _process_queue(self) -> None:
+    #     """Read from image queue and run detection.
 
-        Parameters
-        ----------
-        img_msg : Image
-            Input image
-        """
-        # self._parent_node.get_logger().info("Received image msg!")
-        while self._data_config.drop_old_msg and not self._img_queue.empty():
-            self._img_queue.get(block=False)
+    #     ROS will drop incoming messages if the subscriber queue is full.
+    #     We want to drop old messages in favor of incoming ones, hence the
+    #     queue logic.
+    #     """
+    #     if not self._img_queue.empty():
+    #         if self._img_queue.qsize():
+    #             img = self._img_queue.get(block=True)
+    #             self.detect(img)
 
-        self._img_queue.put(img_msg)
+    #     tracks = self._tracker.get_tracks()
+    #     self._pub_tracks(tracks)
 
-    def _depth_cbk(self, depth_msg: Image) -> None:
-        # self._parent_node.get_logger().info("Received depth msg!")
-        self._last_depth = depth_msg
+    # def _img_cbk(self, img_msg: Image) -> None:
+    #     """If `self.drop_old_msg` is true, empty the queue before
+    #     placing image so that we segment the most recent one / don't lag.
 
-    def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
-        # self._parent_node.get_logger().info("Received depth info msg!")
-        self._intrinsics = camera_info
+    #     Parameters
+    #     ----------
+    #     img_msg : Image
+    #         Input image
+    #     """
+    #     # self._parent_node.get_logger().info("Received image msg!")
+    #     while self._data_config.drop_old_msg and not self._img_queue.empty():
+    #         self._img_queue.get(block=False)
 
-        # SAM3 model loading once valid camera info is received to get correct imgsz based on input image size
-        # if not self.detection_model_loaded:
-        #     self.detection_model_loaded, stride_aligned_imgsz = self._detector.load_model_with_params(
-        #         img_height=camera_info.height,
-        #         stride=14,
-        #         save_sam3_results=self._data_config.save_sam3_results,
-        #         print_stats=self._data_config.print_sam3_stats)
-        #     self._parent_node.get_logger().info(
-        #         f"SAM3 model loaded: {self.detection_model_loaded} with stride-aligned imgsz: {stride_aligned_imgsz}"
-        #     )
+    #     self._img_queue.put(img_msg)
+
+    # def _depth_cbk(self, depth_msg: Image) -> None:
+    #     # self._parent_node.get_logger().info("Received depth msg!")
+    #     self._last_depth = depth_msg
+
+    # def _depth_info_cbk(self, camera_info: CameraInfo) -> None:
+    #     # self._parent_node.get_logger().info("Received depth info msg!")
+    #     self._intrinsics = camera_info
+
+    def _img_cbk(self, img_msg: Image, channel: CameraChannel) -> None:
+        while self._data_config.drop_old_msg and not channel._img_queue.empty():
+            channel._img_queue.get(block=False)
+
+        snapshot = ImageSnapshot(
+            img_msg=img_msg,
+            depth_msg=channel._last_depth,
+            odom_msg=self._last_odom,
+            intrinsics=channel._intrinsics,
+        )
+        channel._img_queue.put(snapshot)
+
+    def _depth_cbk(self, depth_msg: Image, channel: CameraChannel) -> None:
+        channel._last_depth = depth_msg
+
+    def _depth_info_cbk(self, camera_info: CameraInfo, channel: CameraChannel) -> None:
+        channel._intrinsics = camera_info
 
     def _parse_labels(self) -> List[str]:
         if self._data_config.labels != "":
@@ -277,10 +342,19 @@ class DetectionComponenet:
 
         # Declare and get all parameters in one clean loop
         for field_name, field_type in DetectionConfig.__annotations__.items():
-            default_value = getattr(config, field_name)
-            self._parent_node.declare_parameter(field_name, default_value)
+            # default_value = getattr(config, field_name)
+            # self._parent_node.declare_parameter(field_name, default_value)
 
             param_value = self._parent_node.get_parameter(field_name)
+
+            if (
+                param_value.type_ == ParameterType.PARAMETER_NOT_SET
+                or param_value.value is None
+            ):
+                self._parent_node.get_logger().info(
+                    f"Param '{field_name}' not set, using default: {getattr(config, field_name)}"
+                )
+                continue
 
             self._parent_node.get_logger().info(
                 f"getting param: {field_name}: {param_value.value}"
@@ -323,7 +397,7 @@ class DetectionComponenet:
             color=ColorRGBA(r=0.75, g=0.75, b=0.75, a=1.0),
         )
 
-        self._detection_viz_pub.publish(marker_msg)
+        self._detection_marker_pub.publish(marker_msg)
 
         self._marker_count += 1
         if self._marker_count > self._data_config.detection_max_marker_count:
@@ -442,35 +516,37 @@ class DetectionComponenet:
 
     def _deproject_detections(
         self,
+        *,
         x: np.ndarray,
         y: np.ndarray,
         w: np.ndarray,
         h: np.ndarray,
-        time,
+        channel: CameraChannel,
+        snapshot: ImageSnapshot,
         img_height: int,
         img_width: int,
         ori_img_copy=None,
     ) -> Tuple[Tuple[float, float, float], float]:
         """Convert pixel coordinates to 3D point using camera intrinsics"""
-        if self._intrinsics is None or self._last_depth is None:
+        if channel._intrinsics is None or snapshot.depth_msg is None:
             self._parent_node.get_logger().info(
-                f"Error intrinsics: {self._intrinsics is None}, depth: {self._last_depth is None}"
+                f"Error intrinsics: {channel._intrinsics is None}, depth: {snapshot.depth_msg is None}"
             )
             return (0, 0, 0), 0, ori_img_copy
 
-        fx = self._intrinsics.k[0]
-        fy = self._intrinsics.k[4]
-        cx = self._intrinsics.k[2]
-        cy = self._intrinsics.k[5]
+        fx = channel._intrinsics.k[0]
+        fy = channel._intrinsics.k[4]
+        cx = channel._intrinsics.k[2]
+        cy = channel._intrinsics.k[5]
 
-        encoding = self._last_depth.encoding
+        encoding = snapshot.depth_msg.encoding
 
         # TODO remove after testing
         # if self._data_config.camera_transform == "spot_camera":
         #     depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, encoding)
         # else:
 
-        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(self._last_depth, encoding)
+        depth_img = cv_bridge.CvBridge().imgmsg_to_cv2(snapshot.depth_msg, encoding)
 
         if self._data_config.scale_depth:
             depth_img = (
@@ -484,21 +560,6 @@ class DetectionComponenet:
         y_min = round(max(0, y - h / 2))
         y_max = round(min(img_height - 1, y + h // 2))
 
-        # Rotate box coordinates by 90 degrees anticlockwise if using spot camera
-        # Anticlockwise rotation in this case actually means clockwise rotation in the computer vision image frame with positive y down
-        # if self._data_config.camera_transform == "spot_camera":
-        #     x_min, y_min, x_max, y_max = self._rotate_bbox_coords(
-        #         x_min, y_min, x_max, y_max, img_height, img_width, rot_type="clockwise"
-        #     )
-
-        #     # draw rectangle on ori_img_copy for visualization
-        #     if ori_img_copy is not None:
-        #         cv2.rectangle(ori_img_copy, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-
-        #     # Calculate the center of the rotated bounding box
-        #     x = int((x_min + x_max) / 2)
-        #     y = int((y_min + y_max) / 2)
-
         # Extract the region
         region = depth_img[y_min : y_max + 1, x_min : x_max + 1]
 
@@ -508,12 +569,7 @@ class DetectionComponenet:
         if len(valid_pixels) == 0:
             return (0, 0, 0), 0, ori_img_copy
 
-        if self._data_config.camera_transform == "spot_camera":
-            depth_value = np.percentile(valid_pixels, 96)
-        else:
-            depth_value = np.mean(valid_pixels)
-
-        # self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
+        depth_value = np.percentile(valid_pixels, 96)
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
@@ -522,13 +578,13 @@ class DetectionComponenet:
 
         result_camera_coords = np.array([X, Y, Z])
 
-        if self._last_odom is None:
+        if snapshot.odom_msg is None:
             self._parent_node.get_logger().error(
                 "Latest odometry or transform is not available in deproject detections!!"
             )
             return (0, 0, 0), 0, ori_img_copy
 
-        camera_to_body_rot = Rotation.from_quat(self._camera_to_body_rot)
+        camera_to_body_rot = Rotation.from_quat(channel.camera_to_body_rotation)
 
         rot = Rotation.from_quat(
             [
@@ -559,7 +615,7 @@ class DetectionComponenet:
     def set_labels(self):
         pass
 
-    def detect(self, img_msg: Image) -> None:
+    def detect(self, img_snapshot: ImageSnapshot, channel: CameraChannel) -> None:
         """Run inference and publish
         - detections
         - visualizations (if requested)
@@ -572,24 +628,14 @@ class DetectionComponenet:
         if self.setting_labels:
             return
 
-        # if not self.detection_model_loaded:
-        #     self._parent_node.get_logger().info(
-        #         f"SAM3 model not loaded yet, skipping detection."
-        #     )
-        #     return
-
+        img_msg = img_snapshot.img_msg
         img = decode_img_msg(img_msg)
 
-        # if self._data_config.flip_img:
-        #     img = img[::-1, ::-1]
-
         ori_img_copy = img.copy()
-        debug_image = None
 
         pred_color, classes, boxes, confidences = self._detector.predict(
             img,
             plot_output=self._data_config.debug,
-            camera_name=self._data_config.camera_transform,
         )
 
         # self._parent_node.get_logger().info(
@@ -604,7 +650,7 @@ class DetectionComponenet:
             color_msg.header = img_msg.header  # TODO do we want this?
             color_msg.encoding = "rgb8"
 
-            self._annotation_pub.publish(color_msg)
+            self._detection_img_pubs[channel.name].publish(color_msg)
 
         for box, label, conf in zip(boxes, classes, confidences):
 
@@ -614,18 +660,19 @@ class DetectionComponenet:
             # self._parent_node.get_logger().info(f"got box: {box}")
 
             (x, y, z), depth_point, debug_image = self._deproject_detections(
-                box[0],
-                box[1],
+                x=box[0],
+                y=box[1],
                 w=box[2],
                 h=box[3],
                 # box[::2].mean(),
                 # box[1::2].mean(),
                 # w=box[0] - box[2],
                 # h=box[1] - box[3],
-                time=img_msg.header.stamp,
                 img_height=pred_color.shape[0],
                 img_width=pred_color.shape[1],
                 ori_img_copy=ori_img_copy,
+                channel=channel,
+                snapshot=img_snapshot,
             )
 
             # self._parent_node.get_logger().info(f"deproject depth: {depth_point}")
@@ -669,20 +716,3 @@ class DetectionComponenet:
                 label=label,
             )
             self._publish_detection_marker(header=img_msg.header, position=(x, y, z))
-
-            # self._parent_node.get_logger().info(
-            #     f"Published detection: {label}: ({x:0.2f}, {y:0.2f}, {z:0.2f}) with conf: {conf:0.2f}",
-            #     throttle_duration_sec=8.0,
-            # )
-
-        if (
-            debug_image is not None
-            and self._data_config.camera_transform == "spot_camera"
-        ):
-            debug_img_msg = self._bridge.cv2_to_imgmsg(
-                np.array(debug_image), encoding="passthrough"
-            )
-            debug_img_msg.header = img_msg.header
-            debug_img_msg.encoding = "rgb8"
-
-            self._debug_image_pub.publish(debug_img_msg)

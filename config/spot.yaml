@@ -1,0 +1,33 @@
+
+
+# detector_node parameters
+detector_node:
+  ros__parameters:
+    weights:               /home/dcist/data/weights/sam3.pt
+    confidence:            0.5
+    labels:                "desk,chair"
+    tracker_n_dets:        5
+    track_distance_thresh: 5.0
+    scale_depth:           true
+    detection_depth_scale: 1000.0  # realsense depth is in mm
+    odom_sub_topic:         prometheus/odom
+    cameras:
+      front_right:
+        color_sub_topic:    /prometheus/frontright/rotated/color/image_raw
+        depth_sub_topic:    /prometheus/frontright/rotated/depth/image_rect
+        depth_info_sub_topic:  /prometheus/frontright/rotated/color/camera_info
+        camera_frame:          prometheus/frontright
+        camera_to_body_rotation: [ 0.67956665, -0.47025164, 0.20790072, -0.52328754]
+      front_left:
+        color_sub_topic:         /prometheus/frontleft/rotated/color/image_raw
+        depth_sub_topic:        /prometheus/frontleft/rotated/depth/image_rect
+        depth_info_sub_topic:   /prometheus/frontleft/rotated/color/camera_info
+        camera_frame:          prometheus/frontleft
+        camera_to_body_rotation:  [-0.47292251, 0.67509865, -0.52806146, 0.20429687]
+
+# vlm_node parameters
+vlm_node:
+  ros__parameters:
+    flip_img: false
+    color_sub_topic:    /prometheus/frontright/rotated/color/image_raw
+    hand_sub_topic:  /prometheus/hand/color/image_raw
