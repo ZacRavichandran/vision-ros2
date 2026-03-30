@@ -573,7 +573,12 @@ class DetectionComponenet:
         if len(valid_pixels) == 0:
             return (0, 0, 0), 0, ori_img_copy
 
-        depth_value = np.percentile(valid_pixels, 96)
+        if self._data_config.scale_depth == True:
+            depth_value = np.percentile(valid_pixels, 96)
+        else:
+            depth_value = np.median(valid_pixels) 
+
+        # self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx

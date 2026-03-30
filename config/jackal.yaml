@@ -4,10 +4,11 @@
 detector_node:
   ros__parameters:
     weights:               /home/dcist/data/weights/sam3.pt
-    confidence:            0.5
-    labels:                "barrel, traffic cone, Pelican case, person"
-    tracker_n_dets:        5
-    track_distance_thresh: 6.0
+    confidence:            0.6
+    labels:                "vehicle, barrel, traffic cone, person"
+    camera_frame:          zed_left_camera_optical_frame
+    tracker_n_dets:        7
+    track_distance_thresh: 5.0
     scale_depth:           false
     detection_depth_scale: 1000.0  # realsense depth is in mm
     flip_img:              false
