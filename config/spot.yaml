@@ -30,6 +30,8 @@ vlm_node:
     flip_img: false
     color_sub_topic:    /prometheus/front_stitched/image_raw
     hand_sub_topic:  /prometheus/hand/color/image_raw
+    postpend:  And why? Provide a brief explanation with details in 25 words or less. The input is a wide-angle view composed of two side-by-side camera feeds stitched together. Treat it as a single continuous scene.  Minor color discontinuities or duplicate features near the center  seam are stitching artifacts — ignore them.
+    
 
 
 stitcher_node:
