@@ -13,7 +13,6 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/weights", glob("weights/*")),
         ("share/" + package_name + "/launch", glob("launch/*.py")),
-        ("share/" + package_name + "/resource", glob("resource/*.py")),
         ("share/" + package_name + "/config", glob("config/*.yaml")),
     ],
     install_requires=["setuptools", "rclpy"],
