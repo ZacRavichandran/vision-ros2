@@ -130,6 +130,7 @@ class DetectionComponenet:
         )
         self._labels = self._parse_labels()
         self._label_set = {}
+        self._labels = []
 
         self._last_odom = None
 
@@ -334,6 +335,7 @@ class DetectionComponenet:
             ]
             self.setting_labels = True
             self._detector.set_labels(labels)
+            self._labels = labels
             self.setting_labels = False
         else:
             labels = []
@@ -627,7 +629,7 @@ class DetectionComponenet:
         img_msg : Image
             Incoming image message.
         """
-        if self.setting_labels:
+        if self.setting_labels or len(self._labels) == 0:
             return
 
         img_msg = img_snapshot.img_msg
