@@ -17,6 +17,8 @@ def launch_setup(context, *args, **kwargs):
     with open(config_file, "r") as f:
         cfg = yaml.safe_load(f)
 
+    nodes = []
+
     detector_node = Node(
         package="vision_ros2",
         executable="detector_node",
@@ -35,7 +37,21 @@ def launch_setup(context, *args, **kwargs):
         parameters=[config_file],
     )
 
-    return [detector_node, vlm_node]
+    nodes.extend([detector_node, vlm_node])
+
+    stitcher_cfg = cfg.get("stitcher_node", {}).get("ros__parameters", {})
+    if stitcher_cfg.get("camera_topics"):
+        stitcher_node = Node(
+            package="vision_ros2",
+            executable="stitcher_node",
+            name="stitcher_node",
+            namespace=cfg.get("namespace", ""),
+            output="screen",
+            parameters=[config_file],
+        )
+        nodes.append(stitcher_node)
+
+    return nodes
 
 
 def generate_launch_description():

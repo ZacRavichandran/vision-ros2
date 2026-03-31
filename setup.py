@@ -27,6 +27,7 @@ setup(
         "console_scripts": [
             "detector_node = vision_ros2.detector_node:main",
             "vlm_node = vision_ros2.vlm_node:main",
+            "stitcher_node = vision_ros2.sticher_node:main",
         ],
     },
 )

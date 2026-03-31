@@ -29,5 +29,17 @@ detector_node:
 vlm_node:
   ros__parameters:
     flip_img: false
-    color_sub_topic:    /prometheus/frontright/rotated/color/image_raw
+    color_sub_topic:    /prometheus/front_stitched/image_raw
     hand_sub_topic:  /prometheus/hand/color/image_raw
+
+
+stitcher_node:
+  ros__parameters:
+    camera_topics:
+      - /prometheus/frontright/rotated/color/image_raw
+      - /prometheus/frontleft/rotated/color/image_raw
+    front_left_rotation: [-0.47292251, 0.67509865, -0.52806146, 0.20429687]
+    front_right_rotation: [0.67956665, -0.47025164, 0.20790072, -0.52328754]
+    front_left_intrinsics: [331.2188720703125, 0.0, 239.80752563476562, 0.0, 330.9553527832031, 318.1953125, 0.0, 0.0, 1.0]
+    front_right_intrinsics:   [331.4258728027344, 0.0, 244.4047088623047, 0.0, 331.0950927734375, 317.4482116699219, 0.0, 0.0, 1.0]
+    output_topic: /prometheus/front_stitched/image_raw
