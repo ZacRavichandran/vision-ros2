@@ -21,8 +21,10 @@ class VLMInferNode(Node):
         self.declare_parameter("flip_img", False)
         self.declare_parameter("color_sub_topic", "image_raw")
         self.declare_parameter("hand_sub_topic", "hand_img_raw")
+        self.declare_parameter("postpend","And why? Provide a brief explanation with details in 25 words or less.")
         model = self.get_parameter("vlm_model").get_parameter_value().string_value
         self._flip_img = self.get_parameter("flip_img").get_parameter_value().bool_value
+        self._postpend = self.get_parameter("postpend").get_parameter_value().string_value
         img_sub = (
             self.get_parameter("color_sub_topic").get_parameter_value().string_value
         )
@@ -75,10 +77,7 @@ class VLMInferNode(Node):
             query_response.answer = "VLM could not recieve image. Response is unknown"
             return query_response
 
-        query = query_request.query
-        if postpend:
-            query += ". And why? Provide a brief explaination with details in 25 words or less."
-
+        query = f"{query_request.query}. {self._postpend}"
         self.get_logger().info(f"sending query: {query}")
 
         msg = self._vlm.open_query(prompt=query, image=img_msg)
