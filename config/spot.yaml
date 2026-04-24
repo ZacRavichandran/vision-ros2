@@ -1,0 +1,46 @@
+
+
+# detector_node parameters
+detector_node:
+  ros__parameters:
+    weights:               /home/dcist/data/weights/sam3.pt
+    confidence:            0.5
+    tracker_n_dets:        5
+    track_distance_thresh: 5.0
+    scale_depth:           true
+    detection_depth_scale: 1000.0  # realsense depth is in mm
+    odom_sub_topic:         prometheus/odom
+    cameras:
+      front_right:
+        color_sub_topic:    /prometheus/frontright/rotated/color/image_raw
+        depth_sub_topic:    /prometheus/frontright/rotated/depth/image_rect
+        depth_info_sub_topic:  /prometheus/frontright/rotated/color/camera_info
+        camera_frame:          prometheus/frontright
+        camera_to_body_rotation: [ 0.67956665, -0.47025164, 0.20790072, -0.52328754]
+      front_left:
+        color_sub_topic:         /prometheus/frontleft/rotated/color/image_raw
+        depth_sub_topic:        /prometheus/frontleft/rotated/depth/image_rect
+        depth_info_sub_topic:   /prometheus/frontleft/rotated/color/camera_info
+        camera_frame:          prometheus/frontleft
+        camera_to_body_rotation:  [-0.47292251, 0.67509865, -0.52806146, 0.20429687]
+
+# vlm_node parameters
+vlm_node:
+  ros__parameters:
+    flip_img: false
+    color_sub_topic:    /prometheus/front_stitched/image_raw
+    hand_sub_topic:  /prometheus/hand/color/image_raw
+    postpend:  And why? Provide a brief explanation with details in 25 words or less. The input is a wide-angle view composed of two side-by-side camera feeds stitched together. Treat it as a single continuous scene.  Minor color discontinuities or duplicate features near the center  seam are stitching artifacts — ignore them.
+    
+
+
+stitcher_node:
+  ros__parameters:
+    camera_topics:
+      - /prometheus/frontright/rotated/color/image_raw
+      - /prometheus/frontleft/rotated/color/image_raw
+    front_left_rotation: [-0.47292251, 0.67509865, -0.52806146, 0.20429687]
+    front_right_rotation: [0.67956665, -0.47025164, 0.20790072, -0.52328754]
+    front_left_intrinsics: [331.2188720703125, 0.0, 239.80752563476562, 0.0, 330.9553527832031, 318.1953125, 0.0, 0.0, 1.0]
+    front_right_intrinsics:   [331.4258728027344, 0.0, 244.4047088623047, 0.0, 331.0950927734375, 317.4482116699219, 0.0, 0.0, 1.0]
+    output_topic: /prometheus/front_stitched/image_raw

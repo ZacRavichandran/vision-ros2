@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
+import logging
 import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from ultralytics.models.sam import SAM3SemanticPredictor
+from ultralytics.utils import LOGGER
+
+LOGGER.setLevel(logging.ERROR)  # Suppress ALL ultralytics info and warning logs
 
 warnings.filterwarnings("ignore")
 
@@ -12,10 +17,12 @@ warnings.filterwarnings("ignore")
 class SAM3Infer:
     def __init__(
         self,
-        classes: List[str],
         confidence: float,
         ckpt_path: str,
         device: Optional[str] = "cuda",
+        classes: Optional[List[str]] = [],
+        save_sam3_results: Optional[bool] = False,
+        print_stats: Optional[bool] = False,
     ):
         """SAM3 (Segment Anything Model 3) Inference.
 
@@ -40,15 +47,35 @@ class SAM3Infer:
         self.classes = classes
         self.confidence = confidence
         self.device = device
-        self.predictor = self.load_model(ckpt_path)
+        self.predictor = self.load_model(ckpt_path, save_sam3_results, print_stats)
 
     # ------------------------------------------------------------------
     # Model loading
     # ------------------------------------------------------------------
 
-    def load_model(self, ckpt_path: str):
+    # def calculate_stride_aligned_imgsz(self, img_height: int, stride: int = 14) -> int:
+    #     """Calculate the smallest image height that is divisible by stride."""
+    #     try:
+    #         stride_aligned_imgsz = ((img_height + stride - 1) // stride) * stride
+    #         return stride_aligned_imgsz
+    #     except Exception as e:
+    #         print(f"[SAM3Infer] Error calculating stride-aligned image size: {e}.")
+
+    # def load_model_with_params(self, img_height: int = 621, stride: int = 14, save_sam3_results: bool = False, print_stats: bool = False) -> int:
+    #     """Load SAM3 model with proper runtime parameters"""
+
+    #     try:
+    #         stride_aligned_imgsz = self.calculate_stride_aligned_imgsz(img_height, stride)
+    #         self.predictor = self.load_model(self.ckpt_path, stride_aligned_imgsz, save_sam3_results, print_stats)
+    #         return True, stride_aligned_imgsz
+    #     except Exception as e:
+    #         print(f"[SAM3Infer] Error loading SAM3 model: {e}.")
+    #         return False, None
+
+    def load_model(
+        self, ckpt_path: str, save_sam3_results: bool, print_stats: bool
+    ) -> Any:
         """Load and return a SAM3SemanticPredictor instance."""
-        from ultralytics.models.sam import SAM3SemanticPredictor
 
         overrides = dict(
             conf=self.confidence,
@@ -57,7 +84,9 @@ class SAM3Infer:
             model=ckpt_path,
             device=self.device,
             half=(self.device == "cuda"),  # FP16 on GPU for speed
-            verbose=False,
+            verbose=print_stats,  # Print model inference stats if True
+            save=save_sam3_results,  # To prevent results from being saved to disk if False
+            # imgsz=stride_aligned_imgsz, # SAM3 needs input images to be divisible by its stride which is 14, so 640 image is padded to 644. Explicitly setting imgsz to 644 suppresses a warning about this padding.
         )
         predictor = SAM3SemanticPredictor(overrides=overrides)
         print(f"[SAM3Infer] Loaded SAM3 from '{ckpt_path}' on device '{self.device}'")
@@ -67,9 +96,7 @@ class SAM3Infer:
     # Pre-processing
     # ------------------------------------------------------------------
 
-    def preprocess_img(
-        self, img: np.ndarray, camera_name: str
-    ) -> Tuple[Image.Image, np.ndarray]:
+    def preprocess_img(self, img: np.ndarray) -> Tuple[Image.Image, np.ndarray]:
         """Convert a raw numpy image to a PIL image, applying camera-specific
         transforms (mirrors GroundingDinoInfer.preprocess_img).
 
@@ -231,7 +258,12 @@ class SAM3Infer:
 
             # --- label text -----------------------------------------------
             plot_label = f"{label}_{conf:.2f}"
-            font = ImageFont.load_default()
+            try:
+                font = ImageFont.truetype(
+                    "DejaVuSans.ttf", size=12
+                )  # For more font size control
+            except Exception:
+                font = ImageFont.load_default()
             if hasattr(font, "getbbox"):
                 text_bbox = draw.textbbox((x0, y0), plot_label, font)
             else:
@@ -281,12 +313,12 @@ class SAM3Infer:
                              (empty array if nothing detected)
         """
         pred_classes = self.classes.copy()
-        img_pil, img_np = self.preprocess_img(img, camera_name=camera_name)
+        img_pil, img_np = self.preprocess_img(img)
 
         boxes, labels, masks, confidences = self.get_sam3_output(img_np, pred_classes)
 
         if len(boxes) == 0:
-            return np.asarray(img_pil), "", np.array([]), np.array([]), np.array([])
+            return np.asarray(img_pil), np.array([]), np.array([]), np.array([])
 
         if plot_output:
             tgt = {

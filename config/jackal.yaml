@@ -1,0 +1,33 @@
+
+
+# detector_node parameters
+detector_node:
+  ros__parameters:
+    weights:               /home/dcist/data/weights/sam3.pt
+    confidence:            0.6
+    labels:                "vehicle, barrel, traffic cone, person"
+    camera_frame:          zed_left_camera_optical_frame
+    tracker_n_dets:        7
+    track_distance_thresh: 5.0
+    scale_depth:           false
+    detection_depth_scale: 1000.0  # realsense depth is in mm
+    flip_img:              false
+    odom_sub_topic:         /dlio/odom_node/odom
+    save_sam3_results: false
+    print_sam3_stats: false
+
+    cameras:
+      front:
+        color_sub_topic:    /zed/zed_node/left/image_rect_color
+        depth_sub_topic:  /zed/zed_node/depth/depth_registered
+        depth_info_sub_topic:  /zed/zed_node/depth/camera_info
+        camera_frame:          zed_left_camera_optical_frame
+        camera_to_body_rotation:  [-0.5, 0.5, -0.5, 0.5]  # [x, y, z, w] quaternion
+
+
+
+# vlm_node parameters
+vlm_node:
+  ros__parameters:
+    flip_img: false
+    color_sub_topic:    /zed/zed_node/left/image_rect_color

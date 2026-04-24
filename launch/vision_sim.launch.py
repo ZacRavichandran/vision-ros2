@@ -60,10 +60,10 @@ def generate_launch_description():
     )
 
     # Node configuration
-    grounding_dino_node = Node(
+    detector_node = Node(
         package="vision_ros2",
-        executable="grounding_dino_node",
-        name="grounding_dino_node",
+        executable="detector_node",
+        name="detector_node",
         output="screen",
         namespace=LaunchConfiguration("namespace"),
         parameters=[
@@ -101,7 +101,7 @@ def generate_launch_description():
             input_rgb_topic_arg,
             input_depth_topic_arg,
             input_camera_info_arg,
-            grounding_dino_node,
+            detector_node,
             vlm_node,
         ]
     )
