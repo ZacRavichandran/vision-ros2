@@ -318,7 +318,13 @@ class SAM3Infer:
         boxes, labels, masks, confidences = self.get_sam3_output(img_np, pred_classes)
 
         if len(boxes) == 0:
-            return np.asarray(img_pil), np.array([]), np.array([]), np.array([])
+            return (
+                np.asarray(img_pil),
+                np.array([]),
+                np.array([]),
+                np.array([]),
+                np.array([]),
+            )
 
         if plot_output:
             tgt = {
@@ -332,4 +338,4 @@ class SAM3Infer:
         else:
             annotated_img = np.asarray(img_pil)
 
-        return annotated_img, labels, boxes, confidences
+        return annotated_img, labels, boxes, confidences, masks

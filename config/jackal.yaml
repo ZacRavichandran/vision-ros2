@@ -4,8 +4,8 @@
 detector_node:
   ros__parameters:
     weights:               /home/dcist/data/weights/sam3.pt
-    confidence:            0.6
-    labels:                "vehicle, barrel, traffic cone, person"
+    confidence:            0.4
+    labels:                "floor"
     camera_frame:          zed_left_camera_optical_frame
     tracker_n_dets:        7
     track_distance_thresh: 5.0

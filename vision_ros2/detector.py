@@ -1,6 +1,6 @@
 import queue
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import cv_bridge
 import numpy as np
@@ -11,11 +11,11 @@ from rcl_interfaces.msg import ParameterType
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from scipy.spatial.transform import Rotation
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from std_msgs.msg import ColorRGBA, Header, String
 from teaming_msgs.msg import Detection, Track
 from teaming_msgs.srv import GetLabels, SetLabels
-from vision_msgs.msg import ObjectHypothesisWithPose
+from vision_msgs.msg import LabelInfo, ObjectHypothesisWithPose, VisionClass
 from visualization_msgs.msg import Marker
 
 from vision_ros2.tracker import Hypothesis, Tracker, header_from_track, to_track_msg
@@ -75,11 +75,20 @@ class DetectionConfig:
     detection_viz_image: str = "detection_img"
     detection_viz_3d: str = "detections_marker"
     track_viz_topic: str = "track_markers"
+    semantic_segmentation_topic: str = "segmentation/mask"
+    semantic_confidence_topic: str = "segmentation/confidence"
+    semantic_labels_topic: str = "segmentation/label_info"
+    semantic_pointcloud_topic: str = "/zed/zed_node/point_cloud/cloud_registered"
+    semantic_output_width: int = 0
+    semantic_output_height: int = 0
 
     # Behavior
     drop_old_msg: bool = True
     debug: bool = True
+    semantic_segmentation_enabled: bool = True
+    semantic_publish_confidence: bool = True
     target_frame: str = "map"
+    camera_frame: str = "zed_left_camera_optical_frame"
 
     labels: str = ""
 
@@ -132,6 +141,7 @@ class DetectionComponenet:
         self._parse_labels()
         self._label_set = {}
         # self._labels = []
+        self._semantic_output_size = self._configured_semantic_output_size()
 
         self._last_odom = None
 
@@ -172,6 +182,20 @@ class DetectionComponenet:
             depth=2,
         )
 
+        sensor_data_pub_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=2,
+        )
+
+        latched_label_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
         # pub / sub / service
 
         self._info_topic_pub = self._parent_node.create_publisher(
@@ -193,6 +217,30 @@ class DetectionComponenet:
         self._track_viz_pub = self._parent_node.create_publisher(
             Marker, f"~/{self._data_config.track_viz_topic}", qos_profile
         )
+        self._semantic_segmentation_pub = self._parent_node.create_publisher(
+            Image,
+            f"~/{self._data_config.semantic_segmentation_topic}",
+            sensor_data_pub_profile,
+        )
+        self._semantic_confidence_pub = self._parent_node.create_publisher(
+            Image,
+            f"~/{self._data_config.semantic_confidence_topic}",
+            sensor_data_pub_profile,
+        )
+        self._semantic_labels_pub = self._parent_node.create_publisher(
+            LabelInfo,
+            f"~/{self._data_config.semantic_labels_topic}",
+            latched_label_profile,
+        )
+        self._publish_semantic_label_info()
+
+        if self._data_config.semantic_segmentation_enabled:
+            self._semantic_pointcloud_sub = self._parent_node.create_subscription(
+                PointCloud2,
+                self._data_config.semantic_pointcloud_topic,
+                self._semantic_pointcloud_cbk,
+                sensor_data_pub_profile,
+            )
 
         self._detection_img_pubs = {}
         for channel in self._channels:
@@ -254,6 +302,138 @@ class DetectionComponenet:
             self._label_set[label] = len(self._label_set)
 
         return self._label_set[label]
+
+    def _configured_semantic_output_size(self) -> Optional[Tuple[int, int]]:
+        width = int(self._data_config.semantic_output_width)
+        height = int(self._data_config.semantic_output_height)
+        if width > 0 and height > 0:
+            return width, height
+
+        return None
+
+    def _semantic_pointcloud_cbk(self, pointcloud_msg: PointCloud2) -> None:
+        if pointcloud_msg.width == 0 or pointcloud_msg.height == 0:
+            return
+
+        self._semantic_output_size = (pointcloud_msg.width, pointcloud_msg.height)
+
+    def _get_semantic_class_id_from_label(self, label: str) -> Optional[int]:
+        """Return the mono8 class ID used by the semantic costmap layer.
+
+        The segmentation image reserves 0 for unlabeled/background pixels, so
+        configured labels start at 1.
+        """
+        if label not in self._labels:
+            self._parent_node.get_logger().warn(
+                f"Skipping semantic mask for unknown label '{label}'."
+            )
+            return None
+
+        return self._labels.index(label) + 1
+
+    def _publish_semantic_label_info(self) -> None:
+        if (
+            not self._data_config.semantic_segmentation_enabled
+            or not hasattr(self, "_semantic_labels_pub")
+            or len(self._labels) == 0
+        ):
+            return
+
+        label_info_msg = LabelInfo()
+        label_info_msg.header.stamp = self._parent_node.get_clock().now().to_msg()
+        label_info_msg.header.frame_id = self._data_config.camera_frame
+        label_info_msg.threshold = float(self._data_config.detector_confidence)
+
+        for idx, label in enumerate(self._labels, start=1):
+            if idx > 254:
+                self._parent_node.get_logger().warn(
+                    "semantic_segmentation_layer expects mono8 class IDs; "
+                    f"skipping label '{label}' because its ID would be {idx}."
+                )
+                continue
+
+            vision_class = VisionClass()
+            vision_class.class_id = idx
+            vision_class.class_name = label
+            label_info_msg.class_map.append(vision_class)
+
+        self._semantic_labels_pub.publish(label_info_msg)
+
+    def _publish_semantic_segmentation(
+        self,
+        header: Header,
+        img_shape: Tuple[int, ...],
+        labels: List[str],
+        confidences: List[float],
+        masks: List[np.ndarray],
+    ) -> None:
+        if not self._data_config.semantic_segmentation_enabled:
+            return
+
+        image_height, image_width = img_shape[:2]
+        if self._semantic_output_size is None:
+            width, height = image_width, image_height
+        else:
+            width, height = self._semantic_output_size
+
+        segmentation_mask = np.zeros((height, width), dtype=np.uint8)
+        confidence_mask = np.zeros((height, width), dtype=np.uint8)
+
+        for label, conf, mask in zip(labels, confidences, masks):
+            if conf < self._data_config.detector_confidence or mask is None:
+                continue
+
+            class_id = self._get_semantic_class_id_from_label(label)
+            if class_id is None or class_id > 254:
+                continue
+
+            mask_np = np.asarray(mask, dtype=bool)
+            if mask_np.shape != (height, width):
+                mask_np = np.asarray(
+                    self._resize_mask_nearest(mask_np, width, height), dtype=bool
+                )
+
+            confidence_value = int(np.clip(round(conf * 255.0), 0, 255))
+            update_mask = mask_np & (confidence_value >= confidence_mask)
+            segmentation_mask[update_mask] = class_id
+            confidence_mask[update_mask] = confidence_value
+
+        segmentation_msg = self._bridge.cv2_to_imgmsg(
+            segmentation_mask, encoding="mono8"
+        )
+        segmentation_msg.header = header
+        # segmentation_msg.header.stamp = self._parent_node.get_clock().now().to_msg()
+        # segmentation_msg.header.frame_id = header.frame_id
+        self._semantic_segmentation_pub.publish(segmentation_msg)
+
+        if self._data_config.semantic_publish_confidence:
+            confidence_msg = self._bridge.cv2_to_imgmsg(
+                confidence_mask, encoding="mono8"
+            )
+            # confidence_msg.header.stamp = self._parent_node.get_clock().now().to_msg()
+            # confidence_msg.header.frame_id = header.frame_id
+            confidence_msg.header = header
+            self._semantic_confidence_pub.publish(confidence_msg)
+
+    def _resize_mask_nearest(
+        self, mask: np.ndarray, width: int, height: int
+    ) -> np.ndarray:
+        try:
+            import cv2
+
+            return cv2.resize(
+                mask.astype(np.uint8),
+                (width, height),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(bool)
+        except Exception:
+            y_idx = np.floor(
+                np.linspace(0, mask.shape[0] - 1, height)
+            ).astype(np.int32)
+            x_idx = np.floor(
+                np.linspace(0, mask.shape[1] - 1, width)
+            ).astype(np.int32)
+            return mask[np.ix_(y_idx, x_idx)]
 
     def _odom_cbk(self, odom_msg: Odometry) -> None:
         self._last_odom = odom_msg
@@ -381,6 +561,7 @@ class DetectionComponenet:
             self.setting_labels = True
             self._detector.set_labels(self._labels)
             self.setting_labels = False
+            self._publish_semantic_label_info()
             self._parent_node.get_logger().info(f"setting labels to: {self._labels}")
             response.success = True
         except Exception as e:
@@ -645,9 +826,22 @@ class DetectionComponenet:
 
         ori_img_copy = img.copy()
 
-        pred_color, classes, boxes, confidences = self._detector.predict(
+        pred = self._detector.predict(
             img,
             plot_output=self._data_config.debug,
+        )
+        if len(pred) == 5:
+            pred_color, classes, boxes, confidences, masks = pred
+        else:
+            pred_color, classes, boxes, confidences = pred
+            masks = []
+
+        self._publish_semantic_segmentation(
+            header=img_msg.header,
+            img_shape=img.shape,
+            labels=classes,
+            confidences=confidences,
+            masks=masks,
         )
 
         # self._parent_node.get_logger().info(
