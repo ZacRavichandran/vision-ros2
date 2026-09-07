@@ -128,9 +128,10 @@ class DetectionComponenet:
         self._tf_listener = tf2_ros.TransformListener(
             self._tf_buffer, self._parent_node
         )
-        self._labels = self._parse_labels()
+        # self._labels = self._parse_labels()
+        self._parse_labels()
         self._label_set = {}
-        self._labels = []
+        # self._labels = []
 
         self._last_odom = None
 
@@ -333,13 +334,15 @@ class DetectionComponenet:
             labels = [
                 label.strip().replace("'", "").replace('"', "") for label in labels
             ]
+            self._parent_node.get_logger().info(f"Parsed labels: {labels}")
             self.setting_labels = True
             self._detector.set_labels(labels)
             self._labels = labels
             self.setting_labels = False
         else:
-            labels = []
-        return labels
+            # labels = []
+            self._labels = []
+        # return labels
 
     def _load_config(self) -> DetectionConfig:
         config = DetectionConfig()
@@ -573,7 +576,12 @@ class DetectionComponenet:
         if len(valid_pixels) == 0:
             return (0, 0, 0), 0, ori_img_copy
 
-        depth_value = np.percentile(valid_pixels, 96)
+        if self._data_config.scale_depth == True:
+            depth_value = np.percentile(valid_pixels, 96)
+        else:
+            depth_value = np.median(valid_pixels) 
+
+        # self._parent_node.get_logger().info(f"depth stats: mean: {depth_value}, min: {valid_pixels.min()}, max: {valid_pixels.max()}")
 
         # Convert to 3D coordinates
         X = (x - cx) * depth_value / fx
