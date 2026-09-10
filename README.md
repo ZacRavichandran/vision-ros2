@@ -22,13 +22,6 @@ cd ~/ws/src
 git clone https://github.com/ZacRavichandran/vision-ros2 vision_ros2
 ```
 
-Download model weights for the detector backend you plan to use, e.g. GroundingDINO:
-
-```sh
-wget -O vision_ros2/weights/groundingdino_swint_ogc.pth \
-  https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
-```
-
 For SAM3, place your checkpoint anywhere on disk and point the `weights` parameter (see `config/*.yaml`) at it.
 
 Then build:
