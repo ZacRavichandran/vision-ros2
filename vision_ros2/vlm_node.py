@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
+import base64
+import json
+import time
 from typing import Optional
 
+import cv2
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 from teaming_msgs.srv import Query
 
 from vision_ros2.utils import decode_img_msg
@@ -55,6 +60,9 @@ class VLMInferNode(Node):
             Image, img_sub, self._img_cbk, 1, callback_group=sub_cbk
         )
 
+        # Each answer with the frame it was given, for anything watching (the dashboard).
+        self._log_pub = self.create_publisher(String, "~/query_log", 10)
+
         self._main_srv = self.create_service(
             Query, "~/query_scene", self._query_scene_main
         )
@@ -87,6 +95,7 @@ class VLMInferNode(Node):
         if img_msg is None:
             query_response.success = False
             query_response.answer = "VLM could not recieve image. Response is unknown"
+            self._publish_log(query_request.query, query_response, None)
             return query_response
 
         query = f"{query_request.query}. {self._postpend}"
@@ -99,7 +108,21 @@ class VLMInferNode(Node):
 
         query_response.success = True
         query_response.answer = parsed
+        self._publish_log(query_request.query, query_response, img_msg)
         return query_response
+
+    def _publish_log(self, query: str, response: Query.Response, img) -> None:
+        jpeg = None
+        if img is not None:
+            ok, buf = cv2.imencode(".jpg", img[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 85])
+            jpeg = base64.b64encode(buf.tobytes()).decode() if ok else None
+        self._log_pub.publish(String(data=json.dumps({
+            "t": time.time(),
+            "query": query,
+            "answer": response.answer,
+            "success": response.success,
+            "image_jpeg": jpeg,
+        })))
 
     def _query_scene_main(
         self, query_request: Query.Request, query_response: Query.Response
