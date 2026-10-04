@@ -9,7 +9,9 @@ from PIL import Image
 from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
+    Gemma3ForConditionalGeneration,
     LlavaForConditionalGeneration,
+    PaliGemmaForConditionalGeneration,
     VipLlavaForConditionalGeneration,
 )
 
@@ -17,21 +19,24 @@ from transformers import (
 class SupportedModels(Enum):
     Llava3PhiMini = "xtuner/llava-phi-3-mini-hf"
     VipLlava = "llava-hf/vip-llava-7b-hf"
+    Gemma3 = "google/gemma-3-4b-it"
+    PaliGemma2 = "google/paligemma2-3b-mix-448"
 
 
-def load_quantized(model_class, model_id: str, quantize: bool, device: str):
+def load_quantized(model_class, model_id: str, quantize: bool, device: str,
+                   dtype: torch.dtype = torch.float16):
     """Load a VLM, optionally quantized to 4-bit NF4 with double quantization.
 
     Both are set explicitly: BitsAndBytesConfig defaults to plain FP4.
     """
-    kwargs = {"dtype": torch.float16, "low_cpu_mem_usage": True}
+    kwargs = {"dtype": dtype, "low_cpu_mem_usage": True}
 
     if quantize:
         kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=dtype,
         )
         # A quantized model cannot be moved after loading, so place it here.
         kwargs["device_map"] = {"": device}
@@ -74,6 +79,14 @@ class VLMWrapper:
 
         if model == SupportedModels.Llava3PhiMini.value:
             self.model = LlavaPhi3(quantize=bool(quantize), device=device)
+        elif model == SupportedModels.Gemma3.value:
+            self.model = Gemma3(
+                model, quantize=True if quantize is None else quantize, device=device
+            )
+        elif model == SupportedModels.PaliGemma2.value:
+            self.model = PaliGemma2(
+                model, quantize=True if quantize is None else quantize, device=device
+            )
         elif model == SupportedModels.VipLlava.value:
             # 7B at fp16 is 14 GB of weights; quantized unless told otherwise.
             self.model = VipLlava(
@@ -218,3 +231,84 @@ class VipLlava:
             .replace("#", "")
         )
         return formatted_output
+
+
+class Gemma3:
+    """Gemma 3 instruction-tuned. Computes in bfloat16: it overflows in float16."""
+
+    STYLE = ("Answer in one or two short plain sentences about what is visible in the image. "
+             "No preamble, no lists, no markdown.")
+
+    def __init__(self, model_id: str, quantize: bool = True, device: str = "cuda:0") -> None:
+        self.device = device
+        self.model = load_quantized(
+            Gemma3ForConditionalGeneration, model_id, quantize, device, dtype=torch.bfloat16
+        )
+        self.processor = AutoProcessor.from_pretrained(model_id)
+
+    def infer(
+        self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
+    ) -> str:
+        if crop:  # the bottom half, as VipLlava does
+            width, height = raw_image.size
+            raw_image = raw_image.crop((0, height // 2, width, height))
+        # Untold, it answers in paragraphs of markdown, which end up in the planner's prompt.
+        messages = [
+            {"role": "system", "content": [{"type": "text", "text": self.STYLE}]},
+            {"role": "user", "content": [
+                {"type": "image", "image": raw_image},
+                {"type": "text", "text": raw_prompt},
+            ]},
+        ]
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True,
+            return_dict=True, return_tensors="pt",
+        ).to(self.device, dtype=torch.bfloat16)
+        prompt_len = inputs["input_ids"].shape[-1]
+        with torch.inference_mode():
+            output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
+        # Only the reply: the caller's split on the prompt then has nothing to strip.
+        return self.processor.decode(output[0][prompt_len:], skip_special_tokens=True).strip()
+
+
+class PaliGemma2:
+    """PaliGemma 2 mix: takes task prefixes, not chat, and answers tersely.
+
+    Unlike chat VLMs it rarely agrees with a question that assumes the object.
+    """
+
+    def __init__(self, model_id: str, quantize: bool = True, device: str = "cuda:0") -> None:
+        self.device = device
+        self.model = load_quantized(
+            PaliGemmaForConditionalGeneration, model_id, quantize, device, dtype=torch.bfloat16
+        )
+        self.processor = AutoProcessor.from_pretrained(model_id)
+
+    @staticmethod
+    def task(prompt: str) -> str:
+        """SPINE's free-form request as a PaliGemma task prefix."""
+        text = prompt.strip().strip(".").strip().strip("'\"").strip()
+        if "describe where you are" in text.lower():
+            return "caption en"
+        # It answers in a word; asking for reasons only makes it unanswerable.
+        for tail in ("Answer yes or no, then why.", "Answer yes or no and then explain why.",
+                     "Answer yes or no.", "then why."):
+            text = text.replace(tail, "")
+        return "answer en " + " ".join(text.split())
+
+    def infer(
+        self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
+    ) -> str:
+        if crop:  # the bottom half, as VipLlava does
+            width, height = raw_image.size
+            raw_image = raw_image.crop((0, height // 2, width, height))
+        task = self.task(raw_prompt)
+        inputs = self.processor(
+            text=f"<image>{task}", images=raw_image, return_tensors="pt"
+        ).to(self.device, dtype=torch.bfloat16)
+        prompt_len = inputs["input_ids"].shape[-1]
+        with torch.inference_mode():
+            output = self.model.generate(**inputs, max_new_tokens=80, do_sample=False)
+        reply = self.processor.decode(output[0][prompt_len:], skip_special_tokens=True).strip()
+        # Its captions run to a paragraph; SPINE wants "<room type> with <objects>".
+        return reply.split(". ")[0].rstrip(".") + "." if task == "caption en" else reply
