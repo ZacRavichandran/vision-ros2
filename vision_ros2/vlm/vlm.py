@@ -8,6 +8,7 @@ import torch
 from PIL import Image
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     LlavaForConditionalGeneration,
     VipLlavaForConditionalGeneration,
 )
@@ -18,18 +19,66 @@ class SupportedModels(Enum):
     VipLlava = "llava-hf/vip-llava-7b-hf"
 
 
+def load_quantized(model_class, model_id: str, quantize: bool, device: str):
+    """Load a VLM, optionally quantized to 4-bit NF4 with double quantization.
+
+    Both are set explicitly: BitsAndBytesConfig defaults to plain FP4.
+    """
+    kwargs = {"dtype": torch.float16, "low_cpu_mem_usage": True}
+
+    if quantize:
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        # A quantized model cannot be moved after loading, so place it here.
+        kwargs["device_map"] = {"": device}
+
+    model = model_class.from_pretrained(model_id, **kwargs)
+    return model if quantize else model.to(device)
+
+
+def load_processor(model_id: str, config):
+    """Load a processor, filling in fields older checkpoints leave unset.
+
+    transformers counts image tokens from patch_size and
+    vision_feature_select_strategy; older checkpoints (e.g.
+    xtuner/llava-phi-3-mini-hf) omit them, so copy them from the model config.
+    """
+    processor = AutoProcessor.from_pretrained(model_id)
+    if getattr(processor, "patch_size", None) is not None:
+        return processor
+
+    processor.patch_size = config.vision_config.patch_size
+    strategy = getattr(config, "vision_feature_select_strategy", "default")
+    processor.vision_feature_select_strategy = strategy
+    # A CLIP tower contributes one extra token (CLS) under either strategy:
+    # "default" drops it again, "full" keeps it. A checkpoint missing patch_size
+    # cannot be trusted on this value either, so set it for every strategy --
+    # a stale 0 under "full" is one token short and fails inside generate.
+    processor.num_additional_image_tokens = 1
+    return processor
+
+
 class VLMWrapper:
     def __init__(
         self,
         model: Optional[str] = SupportedModels.VipLlava,
         classes="parking lot, sidewalk, road, park, other",
+        quantize: Optional[bool] = None,
+        device: str = "cuda:0",
     ) -> None:
         self.model = None
 
         if model == SupportedModels.Llava3PhiMini.value:
-            self.model = LlavaPhi3()
+            self.model = LlavaPhi3(quantize=bool(quantize), device=device)
         elif model == SupportedModels.VipLlava.value:
-            self.model = VipLlava()
+            # 7B at fp16 is 14 GB of weights; quantized unless told otherwise.
+            self.model = VipLlava(
+                quantize=True if quantize is None else quantize, device=device
+            )
         else:
             raise ValueError(f"{model} not supported.")
 
@@ -51,7 +100,6 @@ class VLMWrapper:
         )
 
     def open_query(self, prompt: str, image: np.ndarray) -> str:
-        print(image)
         img = Image.fromarray(image)
         output = self.model.infer(raw_prompt=prompt, raw_image=img, crop=False)
 
@@ -86,26 +134,22 @@ class VLMWrapper:
 
 
 class LlavaPhi3:
-    def __init__(self) -> None:
+    def __init__(self, quantize: bool = False, device: str = "cuda:0") -> None:
         model_id = "xtuner/llava-phi-3-mini-hf"
-        self.model = LlavaForConditionalGeneration.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        ).to(0)
-        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.device = device
+        self.model = load_quantized(
+            LlavaForConditionalGeneration, model_id, quantize, device
+        )
+        self.processor = load_processor(model_id, self.model.config)
 
     def infer(
         self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
     ) -> str:
         prompt = self.format_prompt(prompt=raw_prompt)
-        # raw_image = Image.open(image_file)
 
-        # raw_image = Image.open(requests.get(image_file, stream=True).raw)
-
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-            0, torch.float16
-        )
+        inputs = self.processor(
+            text=prompt, images=raw_image, return_tensors="pt"
+        ).to(self.device, torch.float16)
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
         formatted_output = self.processor.decode(
@@ -118,18 +162,14 @@ class LlavaPhi3:
 
 
 class VipLlava:
-    def __init__(self) -> None:
-        pass
-
+    def __init__(self, quantize: bool = True, device: str = "cuda:0") -> None:
         model_id = "llava-hf/vip-llava-7b-hf"
-        self.model = VipLlavaForConditionalGeneration.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            load_in_4bit=True,
+        self.device = device
+        self.model = load_quantized(
+            VipLlavaForConditionalGeneration, model_id, quantize, device
         )
 
-        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.processor = load_processor(model_id, self.model.config)
 
     def infer(
         self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
@@ -161,9 +201,9 @@ class VipLlava:
             top_half = size[1] // 2
             raw_image = raw_image.crop((0, top_half, 640, 480))
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-            0, torch.float16
-        )
+        inputs = self.processor(
+            text=prompt, images=raw_image, return_tensors="pt"
+        ).to(self.device, torch.float16)
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
         formatted_output = self.processor.decode(

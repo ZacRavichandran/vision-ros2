@@ -35,7 +35,17 @@ class VLMInferNode(Node):
             self.get_parameter("hand_sub_topic").get_parameter_value().string_value
         )
 
-        self._vlm = VLMWrapper(model)
+        self.declare_parameter("quantize", True)
+        self.declare_parameter("device", "cuda:0")
+        quantize = self.get_parameter("quantize").get_parameter_value().bool_value
+        device = self.get_parameter("device").get_parameter_value().string_value
+
+        self.get_logger().info(
+            f"loading {model} (quantize={quantize}, device={device}); "
+            "a 7B model takes a minute or so"
+        )
+        self._vlm = VLMWrapper(model, quantize=quantize, device=device)
+        self.get_logger().info("model ready")
 
         self._latest_img = None
         self._latest_hand_img = None
@@ -45,16 +55,18 @@ class VLMInferNode(Node):
             Image, img_sub, self._img_cbk, 1, callback_group=sub_cbk
         )
 
-        self._query_scene_main = self.create_service(
+        self._main_srv = self.create_service(
             Query, "~/query_scene", self._query_scene_main
         )
 
-        self._hand_img_sub = self.create_subscription(
-            Image, hand_camera_sub, self._hand_img_cbk, 1, callback_group=sub_cbk
-        )
-        self._query_scene_main = self.create_service(
-            Query, "~/query_scene" + hand_camera_sub, self._query_scene_hand
-        )
+        # Empty means no hand camera; an empty topic name is invalid.
+        if hand_camera_sub:
+            self._hand_img_sub = self.create_subscription(
+                Image, hand_camera_sub, self._hand_img_cbk, 1, callback_group=sub_cbk
+            )
+            self._hand_srv = self.create_service(
+                Query, "~/query_scene" + hand_camera_sub, self._query_scene_hand
+            )
 
     def _hand_img_cbk(self, img: Image) -> None:
         self._latest_hand_img = decode_img_msg(img)
