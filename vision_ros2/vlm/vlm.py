@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from enum import Enum
+import time
 from typing import Optional, Tuple
 
 import numpy as np
@@ -8,7 +9,9 @@ import torch
 from PIL import Image
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     LlavaForConditionalGeneration,
+    Qwen2_5_VLForConditionalGeneration,
     VipLlavaForConditionalGeneration,
 )
 
@@ -16,20 +19,25 @@ from transformers import (
 class SupportedModels(Enum):
     Llava3PhiMini = "xtuner/llava-phi-3-mini-hf"
     VipLlava = "llava-hf/vip-llava-7b-hf"
+    Qwen25VL = "Qwen/Qwen2.5-VL-3B-Instruct"
 
 
 class VLMWrapper:
     def __init__(
         self,
-        model: Optional[str] = SupportedModels.VipLlava,
+        model: Optional[str] = SupportedModels.VipLlava.value,
         classes="parking lot, sidewalk, road, park, other",
+        quantization: str = "4bit",
+        device: str = "cuda",
     ) -> None:
         self.model = None
 
         if model == SupportedModels.Llava3PhiMini.value:
-            self.model = LlavaPhi3()
+            self.model = LlavaPhi3(quantization=quantization, device=device)
         elif model == SupportedModels.VipLlava.value:
-            self.model = VipLlava()
+            self.model = VipLlava(quantization=quantization, device=device)
+        elif model == SupportedModels.Qwen25VL.value:
+            self.model = Qwen25VL(quantization=quantization, device=device)
         else:
             raise ValueError(f"{model} not supported.")
 
@@ -85,15 +93,65 @@ class VLMWrapper:
         return output, parsed
 
 
+def _model_load_kwargs(quantization: str, device: str) -> dict:
+    """Build memory-safe Hugging Face loading options.
+
+    CUDA_VISIBLE_DEVICES is intentionally respected: ``cuda:0`` means the first
+    GPU visible to this process, not necessarily physical GPU 0.
+    """
+
+    if device == "cpu":
+        return {"device_map": "cpu", "torch_dtype": torch.float32}
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but no CUDA device is visible")
+
+    kwargs = {
+        "device_map": {"": 0},
+        "torch_dtype": torch.float16,
+        "low_cpu_mem_usage": True,
+    }
+    if quantization == "4bit":
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+    elif quantization == "8bit":
+        kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+    elif quantization not in ("none", "fp16"):
+        raise ValueError("quantization must be one of: 4bit, 8bit, fp16, none")
+    return kwargs
+
+
+def _move_inputs(inputs, device: str):
+    target = "cpu" if device == "cpu" else "cuda:0"
+    return inputs.to(target)
+
+
 class LlavaPhi3:
-    def __init__(self) -> None:
+    def __init__(self, quantization: str = "4bit", device: str = "cuda") -> None:
         model_id = "xtuner/llava-phi-3-mini-hf"
+        self.device = device
         self.model = LlavaForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
-            low_cpu_mem_usage=True,
-        ).to(0)
+            **_model_load_kwargs(quantization, device),
+        )
         self.processor = AutoProcessor.from_pretrained(model_id)
+        # Some LLaVA checkpoints omit processor metadata required by newer
+        # transformers releases. Copy it from the loaded vision config.
+        if getattr(self.processor, "patch_size", None) is None:
+            self.processor.patch_size = self.model.config.vision_config.patch_size
+        if getattr(self.processor, "vision_feature_select_strategy", None) is None:
+            self.processor.vision_feature_select_strategy = getattr(
+                self.model.config, "vision_feature_select_strategy", "default"
+            )
+        # This checkpoint uses a CLIP vision tower with a CLS token, but its
+        # processor metadata predates this Transformers field.  Without the
+        # additional token, LlavaProcessor expands <image> to 575 placeholders
+        # while the model produces 576 patch features.
+        if not getattr(self.processor, "num_additional_image_tokens", 0):
+            self.processor.num_additional_image_tokens = 1
 
     def infer(
         self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
@@ -103,42 +161,28 @@ class LlavaPhi3:
 
         # raw_image = Image.open(requests.get(image_file, stream=True).raw)
 
-        inputs = self.processor(prompt, raw_image, return_tensors="pt").to(
-            0, torch.float32
-        )
-
+        inputs = _move_inputs(self.processor(images=raw_image, text=prompt, return_tensors="pt"), self.device)
+        prompt_length = inputs["input_ids"].shape[1]
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
-        formatted_output = self.processor.decode(
-            output[0][2:], skip_special_tokens=True
-        )
+        formatted_output = self.processor.decode(output[0][prompt_length:], skip_special_tokens=True)
         return formatted_output
 
     def format_prompt(self, prompt: str) -> str:
-        return f"<|user|>\n<image>\n{prompt}\n<|assistant|>\n"
+        return self.processor.tokenizer.apply_chat_template(
+            [{'role': 'user', 'content': '<image>\n' + prompt}],
+            tokenize=False, add_generation_prompt=True)
 
 
 class VipLlava:
-    def __init__(self,
-                 device: str = "gpu") -> None:
-        
+    def __init__(self, quantization: str = "4bit", device: str = "cuda") -> None:
         self.device = device
 
         print(f"Initializing VipLlava model on {device}...", flush=True)
 
         model_id = "llava-hf/vip-llava-7b-hf"
-        if device == "gpu":
-            self.model = VipLlavaForConditionalGeneration.from_pretrained(
-                model_id,
-                torch_dtype=torch.float32,
-                low_cpu_mem_usage=False,
-                load_in_4bit=True,
-            )
-        elif device == "cpu":
-            self.model = VipLlavaForConditionalGeneration.from_pretrained(
-                model_id,
-                low_cpu_mem_usage=False).to("cpu")
-        else:
-            raise ValueError(f"Unknown device type: {device}. Choose between 'cpu' and 'gpu'.")
+        self.model = VipLlavaForConditionalGeneration.from_pretrained(
+            model_id, **_model_load_kwargs(quantization, device)
+        )
 
         self.processor = AutoProcessor.from_pretrained(model_id)
 
@@ -172,17 +216,13 @@ class VipLlava:
             top_half = size[1] // 2
             raw_image = raw_image.crop((0, top_half, 640, 480))
 
-        if self.device == "gpu":
-            inputs = self.processor(raw_image, prompt, return_tensors="pt").to(
-                0, torch.float32
-            )
-        else:
-            inputs = self.processor(raw_image, prompt, return_tensors="pt").to("cpu")
+        inputs = _move_inputs(
+            self.processor(raw_image, prompt, return_tensors="pt"), self.device
+        )
 
         output = self.model.generate(**inputs, max_new_tokens=200, do_sample=False)
-        formatted_output = self.processor.decode(
-            output[0][2:], skip_special_tokens=True
-        )
+        prompt_length = inputs["input_ids"].shape[1]
+        formatted_output = self.processor.decode(output[0][prompt_length:], skip_special_tokens=True)
         # model provides some extra formatting which we don't want
         formatted_output = (
             formatted_output.replace("###Assistant:", "")
@@ -191,3 +231,65 @@ class VipLlava:
             .replace("#", "")
         )
         return formatted_output
+
+
+class Qwen25VL:
+    def __init__(self, quantization: str = "4bit", device: str = "cuda") -> None:
+        self.device = device
+        self.profile = False
+        model_id = SupportedModels.Qwen25VL.value
+        print(f"Initializing Qwen2.5-VL model on {device}...", flush=True)
+        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            model_id, **_model_load_kwargs(quantization, device)
+        )
+        self.processor = AutoProcessor.from_pretrained(model_id)
+
+    def infer(
+        self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False
+    ) -> str:
+        from .profiling import FirstTokenTimer, synchronize, report_profile
+        if self.profile:
+            synchronize(self.device)
+        started = time.monotonic()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": raw_image},
+                    {"type": "text", "text": raw_prompt},
+                ],
+            }
+        ]
+        prompt = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self.processor(
+            text=[prompt], images=[raw_image], padding=True, return_tensors="pt"
+        )
+        prepared = time.monotonic()
+        inputs = _move_inputs(inputs, self.device)
+        options = {}
+        if self.profile:
+            synchronize(self.device)
+            timer = FirstTokenTimer(self.device)
+            options['stopping_criteria'] = StoppingCriteriaList([timer])
+        transferred = time.monotonic()
+        if self.profile:
+            print(f'VLM_PROFILE generation_start threads={torch.get_num_threads()} preprocessing_s={prepared-started:.3f} grid={inputs["image_grid_thw"].tolist()}', flush=True)
+        token_limit = 8 if raw_prompt.startswith('CLUE_DIRECTION_V1\n') else 200
+        output = self.model.generate(**inputs, max_new_tokens=token_limit, do_sample=False, num_beams=1, use_cache=True, **options)
+        if self.profile:
+            synchronize(self.device)
+            report_profile(self.model, inputs, output, timer, started, prepared,
+                           transferred, time.monotonic(), raw_image)
+        prompt_length = inputs["input_ids"].shape[1]
+        generated = output[0, prompt_length:]
+        eos = self.model.generation_config.eos_token_id
+        eos = eos if isinstance(eos, list) else [eos]
+        if len(generated) >= token_limit and int(generated[-1]) not in eos:
+            raise ValueError("VLM output reached token limit without EOS; observation is unknown")
+        return self.processor.batch_decode(
+            output[:, prompt_length:],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0]

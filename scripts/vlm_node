@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -e
+exec python3 -m vision_ros2.vlm_node "$@"

@@ -22,10 +22,10 @@ setup(
     description="TODO: Package description",
     license="MIT",
     tests_require=["pytest"],
+    scripts=["scripts/vlm_node"],
     entry_points={
         "console_scripts": [
             "grounding_dino_node = vision_ros2.grounding_dino_node:main",
-            "vlm_node = vision_ros2.vlm_node:main",
         ],
     },
 )
