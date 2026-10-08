@@ -59,10 +59,7 @@ def load_processor(model_id: str, config):
     processor.patch_size = config.vision_config.patch_size
     strategy = getattr(config, "vision_feature_select_strategy", "default")
     processor.vision_feature_select_strategy = strategy
-    # A CLIP tower contributes one extra token (CLS) under either strategy:
-    # "default" drops it again, "full" keeps it. A checkpoint missing patch_size
-    # cannot be trusted on this value either, so set it for every strategy --
-    # a stale 0 under "full" is one token short and fails inside generate.
+    # The CLIP CLS token, under either strategy ("default" drops it later).
     processor.num_additional_image_tokens = 1
     return processor
 
@@ -72,26 +69,19 @@ class VLMWrapper:
         self,
         model: Optional[str] = SupportedModels.VipLlava,
         classes="parking lot, sidewalk, road, park, other",
-        quantize: Optional[bool] = None,
+        quantize: bool = True,
         device: str = "cuda:0",
     ) -> None:
         self.model = None
 
         if model == SupportedModels.Llava3PhiMini.value:
-            self.model = LlavaPhi3(quantize=bool(quantize), device=device)
+            self.model = LlavaPhi3(quantize=quantize, device=device)
         elif model == SupportedModels.Gemma3.value:
-            self.model = Gemma3(
-                model, quantize=True if quantize is None else quantize, device=device
-            )
+            self.model = Gemma3(model, quantize=quantize, device=device)
         elif model == SupportedModels.PaliGemma2.value:
-            self.model = PaliGemma2(
-                model, quantize=True if quantize is None else quantize, device=device
-            )
+            self.model = PaliGemma2(model, quantize=quantize, device=device)
         elif model == SupportedModels.VipLlava.value:
-            # 7B at fp16 is 14 GB of weights; quantized unless told otherwise.
-            self.model = VipLlava(
-                quantize=True if quantize is None else quantize, device=device
-            )
+            self.model = VipLlava(quantize=quantize, device=device)
         else:
             raise ValueError(f"{model} not supported.")
 
