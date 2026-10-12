@@ -30,6 +30,8 @@ def load_quantized(model_class, model_id: str, quantize: bool, device: str,
     Both are set explicitly: BitsAndBytesConfig defaults to plain FP4.
     """
     kwargs = {"dtype": dtype, "low_cpu_mem_usage": True}
+    # bitsandbytes 4-bit needs CUDA; on the CPU the model runs in `dtype` (bf16 for PaliGemma).
+    quantize = quantize and device.startswith("cuda")
 
     if quantize:
         kwargs["quantization_config"] = BitsAndBytesConfig(

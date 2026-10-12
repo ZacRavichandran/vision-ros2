@@ -38,6 +38,8 @@ class CameraChannelConfig:
     depth_info_sub_topic: str
     camera_frame: str
     camera_to_body_rotation: List[float]
+    # Set when the camera is on another robot than the node's (one detector shared by a fleet).
+    odom_sub_topic: str = ""
 
 
 class CameraChannel:
@@ -49,6 +51,7 @@ class CameraChannel:
         self._img_queue = queue.Queue(maxsize=1)
         self._last_depth = None
         self._intrinsics = None
+        self._last_odom = None
 
     def __repr__(self):
         return f"CameraChannel({self.name}, color={self.config.color_sub_topic})"
@@ -82,6 +85,8 @@ class DetectionConfig:
     target_frame: str = "map"
 
     labels: str = ""
+    # Further set_labels services, for the other robots a shared detector serves.
+    extra_label_services: List[str] = ()
 
     # Detection params
     detector_confidence: float = 0.5
@@ -217,6 +222,13 @@ class DetectionComponenet:
             self._detection_img_pubs[channel.name] = self._parent_node.create_publisher(
                 Image, f"~/detection_img/{channel.name}", qos_profile
             )
+            if channel.config.odom_sub_topic:
+                self._parent_node.create_subscription(
+                    Odometry,
+                    channel.config.odom_sub_topic,
+                    lambda msg, ch=channel: setattr(ch, "_last_odom", msg),
+                    img_sub_profile,
+                )
 
         # self._rgb_sub = self._parent_node.create_subscription(
         #     Image, self._data_config.color_sub_topic, self._img_cbk, img_sub_profile
@@ -239,6 +251,10 @@ class DetectionComponenet:
             "detector/set_labels",
             self._set_labels_callback,
         )
+        self._extra_label_services = [
+            self._parent_node.create_service(SetLabels, name, self._set_labels_callback)
+            for name in self._data_config.extra_label_services
+        ]
         self._get_labels_service = self._parent_node.create_service(
             GetLabels,
             "detector/get_labels",
@@ -317,7 +333,7 @@ class DetectionComponenet:
         snapshot = ImageSnapshot(
             img_msg=img_msg,
             depth_msg=channel._last_depth,
-            odom_msg=self._last_odom,
+            odom_msg=channel._last_odom if channel.config.odom_sub_topic else self._last_odom,
             intrinsics=channel._intrinsics,
         )
         channel._img_queue.put(snapshot)

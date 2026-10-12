@@ -83,6 +83,9 @@ class DetectorNode(Node):
                     .get_parameter_value()
                     .double_array_value
                 ),
+                odom_sub_topic=camera_params[f"{cam_name}.odom_sub_topic"].get_parameter_value().string_value
+                if f"{cam_name}.odom_sub_topic" in camera_params
+                else "",
             )
 
             channels.append(CameraChannel(config))
