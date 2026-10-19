@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import List
 
 import numpy as np
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, Vector3
 from std_msgs.msg import Header
 from teaming_msgs.msg import Track
 
@@ -23,6 +23,8 @@ class Hypothesis:
         label: str = "",
         parent: str = "",
         is_published: bool = False,
+        extent=None,
+        size=None,
     ) -> None:
         self.n_detections = 0
         self.class_id = class_id
@@ -37,6 +39,23 @@ class Hypothesis:
         self.history_weight = 0.90
         self.label = label
         self.parent = parent
+        # Union of every view's (lo, hi) corners, so a top view and a side view add up to the whole object.
+        self.extent = None if extent is None else (np.array(extent[0], float), np.array(extent[1], float))
+        self._size = None if size is None else np.array(size, float)
+
+    @property
+    def size(self) -> np.ndarray:
+        """x and y span, and the top's height above the ground (z = 0)."""
+        if self.extent is None:
+            return np.zeros(3) if self._size is None else self._size
+        lo, hi = self.extent
+        return np.array([hi[0] - lo[0], hi[1] - lo[1], max(hi[2], 0.0)])
+
+    def grow(self, extent) -> None:
+        if extent is None:
+            return
+        lo, hi = (np.array(e, float) for e in extent)
+        self.extent = (lo, hi) if self.extent is None else (np.minimum(self.extent[0], lo), np.maximum(self.extent[1], hi))
 
     def update_pose(self, incoming_pose: np.ndarray) -> np.ndarray:
         return (
@@ -48,7 +67,8 @@ class Hypothesis:
             incoming_pose - self.pose
         ) + self.history_weight * self.velocity
 
-    def update(self, time: float, pose: np.ndarray, score: float) -> None:
+    def update(self, time: float, pose: np.ndarray, score: float, extent=None) -> None:
+        self.grow(extent)
         self.poses.append(pose)
         self.pose = self.update_pose(pose)
         self.velocity = self.update_velocity(pose)
@@ -102,7 +122,8 @@ class HypothesisSet:
         n_hypothesis: int,
         frame: str,
         label: str,
-        logger = None
+        logger = None,
+        extent=None,
     ) -> bool:
         # find best fit pose
         added_hypothesis = False
@@ -120,7 +141,7 @@ class HypothesisSet:
 
 
         if min_hypothesis_dist < self.dist_threshold:
-            self.hypotheses[min_idx].update(time=time, pose=pose, score=score)
+            self.hypotheses[min_idx].update(time=time, pose=pose, score=score, extent=extent)
 
         else:
             # print(f"min distance: {min_hypothesis_dist:0.2f}. adding new track")
@@ -133,6 +154,7 @@ class HypothesisSet:
                     idx=n_hypothesis,
                     frame=frame,
                     label=label,
+                    extent=extent,
                 )
             )
             added_hypothesis = True
@@ -181,6 +203,7 @@ class Tracker:
         frame: str,
         label: str = "",
         logger = None,
+        extent=None,
     ) -> None:
         added = self.hypotheses[label].add_detection(
             time=time,
@@ -191,6 +214,7 @@ class Tracker:
             n_hypothesis=self.hypothesis_idx,
             label=label,
             logger=logger,
+            extent=extent,
         )
         if added:
             self.hypothesis_idx += 1
@@ -238,6 +262,8 @@ def to_track_msg(track: Hypothesis) -> Track:
         x=float(track.pose[0]), y=float(track.pose[1]), z=float(track.pose[2])
     )
     track_msg.pose.pose.orientation.w = 1.0
+    size = track.size
+    track_msg.size = Vector3(x=float(size[0]), y=float(size[1]), z=float(size[2]))
     return track_msg
 
 
@@ -260,4 +286,5 @@ def from_track_msg(track_msg: Track, parent: str = "") -> Hypothesis:
         score=1,
         label=track_msg.label,
         parent=parent,
+        size=(track_msg.size.x, track_msg.size.y, track_msg.size.z),
     )

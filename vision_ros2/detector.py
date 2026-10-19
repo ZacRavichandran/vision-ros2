@@ -555,7 +555,7 @@ class DetectionComponenet:
             self._parent_node.get_logger().info(
                 f"Error intrinsics: {channel._intrinsics is None}, depth: {snapshot.depth_msg is None}"
             )
-            return (0, 0, 0), 0, ori_img_copy
+            return (0, 0, 0), 0, ori_img_copy, None
 
         fx = channel._intrinsics.k[0]
         fy = channel._intrinsics.k[4]
@@ -590,7 +590,7 @@ class DetectionComponenet:
         valid_pixels = region[np.isfinite(region)]
 
         if len(valid_pixels) == 0:
-            return (0, 0, 0), 0, ori_img_copy
+            return (0, 0, 0), 0, ori_img_copy, None
 
         if self._data_config.scale_depth == True:
             depth_value = np.percentile(valid_pixels, 96)
@@ -610,7 +610,7 @@ class DetectionComponenet:
             self._parent_node.get_logger().error(
                 "Latest odometry or transform is not available in deproject detections!!"
             )
-            return (0, 0, 0), 0, ori_img_copy
+            return (0, 0, 0), 0, ori_img_copy, None
 
         camera_to_body_rot = Rotation.from_quat(channel.camera_to_body_rotation)
 
@@ -630,15 +630,19 @@ class DetectionComponenet:
             ]
         )
 
-        result_map = (
-            rot.as_matrix() @ camera_to_body_rot.as_matrix() @ result_camera_coords
-        ) + trans
+        to_map = rot.as_matrix() @ camera_to_body_rot.as_matrix()
+        result_map = (to_map @ result_camera_coords) + trans
+        # The box's corners at the object's depth, in the map frame: this view's share of the object's extent.
+        corners = np.array([[(u - cx) * depth_value / fx, (v - cy) * depth_value / fy, depth_value]
+                            for u in (x_min, x_max) for v in (y_min, y_max)])
+        corners_map = corners @ to_map.T + trans
+        extent = (corners_map.min(axis=0), corners_map.max(axis=0))
 
         x = result_map[0]
         y = result_map[1]
         z = result_map[2]
 
-        return (x, y, z), depth_value, ori_img_copy
+        return (x, y, z), depth_value, ori_img_copy, extent
 
     def set_labels(self):
         pass
@@ -687,7 +691,7 @@ class DetectionComponenet:
 
             # self._parent_node.get_logger().info(f"got box: {box}")
 
-            (x, y, z), depth_point, debug_image = self._deproject_detections(
+            (x, y, z), depth_point, debug_image, extent = self._deproject_detections(
                 x=box[0],
                 y=box[1],
                 w=box[2],
@@ -736,6 +740,7 @@ class DetectionComponenet:
                 pose=np.array([x, y, z]),
                 label=label,
                 frame=self._data_config.target_frame,
+                extent=extent,
             )
 
             self._publish_detection_msg(
