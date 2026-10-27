@@ -2,6 +2,7 @@
 
 import base64
 import json
+import subprocess
 import time
 from typing import Optional
 
@@ -101,7 +102,14 @@ class VLMInferNode(Node):
         query = f"{query_request.query}. {self._postpend}"
         self.get_logger().info(f"sending query: {query}")
 
-        msg = self._vlm.open_query(prompt=query, image=img_msg)
+        try:
+            msg = self._vlm.open_query(prompt=query, image=img_msg)
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:  # a remote VLM (Claude) can fail
+            self.get_logger().error(f"vlm query failed: {exc}")
+            query_response.success = False
+            query_response.answer = "VLM query failed. Response is unknown"
+            self._publish_log(query_request.query, query_response, img_msg)
+            return query_response
 
         parsed = msg.split(query)[-1].strip()
         self.get_logger().info(f"vlm response: {[parsed]}")

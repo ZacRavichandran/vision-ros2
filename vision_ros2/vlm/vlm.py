@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+import base64
+import io
+import json
+import subprocess
+import tempfile
 from enum import Enum
 from typing import Optional, Tuple
 
@@ -21,6 +26,7 @@ class SupportedModels(Enum):
     VipLlava = "llava-hf/vip-llava-7b-hf"
     Gemma3 = "google/gemma-3-4b-it"
     PaliGemma2 = "google/paligemma2-3b-mix-448"
+    ClaudeFable = "claude-fable-5-1"
 
 
 def load_quantized(model_class, model_id: str, quantize: bool, device: str,
@@ -84,6 +90,8 @@ class VLMWrapper:
             self.model = PaliGemma2(model, quantize=quantize, device=device)
         elif model == SupportedModels.VipLlava.value:
             self.model = VipLlava(quantize=quantize, device=device)
+        elif model.startswith("claude-"):
+            self.model = Claude(model)
         else:
             raise ValueError(f"{model} not supported.")
 
@@ -304,3 +312,47 @@ class PaliGemma2:
         reply = self.processor.decode(output[0][prompt_len:], skip_special_tokens=True).strip()
         # Its captions run to a paragraph; SPINE wants "<room type> with <objects>".
         return reply.split(". ")[0].rstrip(".") + "." if task == "caption en" else reply
+
+
+class Claude:
+    """Claude through `claude -p` on the operator's Claude Code login, as SPINE's planner bridge uses it.
+
+    Runs off the machine, so it takes no GPU or CPU; it needs the network and the `claude` CLI.
+    """
+
+    SYSTEM = ("You are the vision system of a robot. Answer questions about the camera image briefly, "
+              "in plain sentences without markdown.")
+    TIMEOUT_S = 120
+
+    def __init__(self, model_id: str, effort: str = "low") -> None:
+        self.model_id, self.effort = model_id, effort
+
+    def argv(self) -> list:
+        return ["claude", "-p", "--model", self.model_id, "--effort", self.effort, "--tools", "",
+                "--no-session-persistence", "--input-format", "stream-json",
+                "--output-format", "stream-json", "--verbose", "--system-prompt", self.SYSTEM]
+
+    @staticmethod
+    def message(prompt: str, image: Image) -> str:
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        return json.dumps({"type": "user", "message": {"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                         "data": base64.standard_b64encode(buf.getvalue()).decode()}},
+            {"type": "text", "text": prompt},
+        ]}}) + "\n"
+
+    def infer(self, raw_prompt: str, raw_image: Image, crop: Optional[bool] = False) -> str:
+        if crop:  # the bottom half, as VipLlava does
+            width, height = raw_image.size
+            raw_image = raw_image.crop((0, height // 2, width, height))
+        # An empty cwd keeps any repo's CLAUDE.md, settings and memory out of the prompt.
+        with tempfile.TemporaryDirectory(prefix="vlm-claude-") as cwd:
+            proc = subprocess.run(self.argv(), input=self.message(raw_prompt, raw_image), capture_output=True,
+                                  text=True, cwd=cwd, timeout=self.TIMEOUT_S)
+        events = [json.loads(line) for line in proc.stdout.splitlines() if line.startswith("{")]
+        results = [e for e in events if e.get("type") == "result"]
+        if proc.returncode or not results or results[-1].get("is_error"):
+            detail = results[-1].get("result") if results else proc.stderr.strip()[:300]
+            raise RuntimeError(f"claude failed ({proc.returncode}): {detail}")
+        return str(results[-1].get("result", "")).strip()
