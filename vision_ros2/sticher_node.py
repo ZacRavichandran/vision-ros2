@@ -84,9 +84,10 @@ class FrontImageStitcherNode(Node):
         frames = [self._bridge.imgmsg_to_cv2(m, desired_encoding="rgb8") for m in msgs]
         h = min(f.shape[0] for f in frames)
         frames = [f[:h] for f in frames]
-        stitched = np.hstack(frames)
-        out_msg = self._bridge.cv2_to_imgmsg(stitched, encoding="rgb8")
-        out_msg.header = msgs[0].header
+        stitched = np.ascontiguousarray(np.hstack(frames))
+        # Built by hand: cv2_to_imgmsg fails when Python's OpenCV (5.x renumbered its types) differs from cv_bridge's.
+        out_msg = Image(header=msgs[0].header, height=stitched.shape[0], width=stitched.shape[1], encoding="rgb8",
+                        step=stitched.shape[1] * 3, data=stitched.tobytes())
         self._pub.publish(out_msg)
 
     def _passthrough_cbk(self, msg: Image) -> None:
